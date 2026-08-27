@@ -1,0 +1,213 @@
+{
+  "version": "2.4.0",
+  "exportedAt": "2026-08-27T23:22:20.788Z",
+  "storeName": "Açaí do Ryan",
+  "sales": [
+    {
+      "date": "27/08/2026",
+      "month": "Agosto/2026",
+      "clientName": "Adina",
+      "clientId": "client-1787871879262",
+      "category": "Açaí",
+      "items": [
+        {
+          "id": "item-1787872662205",
+          "name": "Açaí Artesanal Copo Pronto (300ml)",
+          "category": "Açaí",
+          "size": "300ml",
+          "unitPrice": 12,
+          "quantity": 1,
+          "total": 12,
+          "toppings": [
+            "Leite Condensado",
+            "Granola Mista",
+            "Leite em Pó Ninho",
+            "Paçoca Rolha",
+            "Amendoim Torrado",
+            "M & M / Confeitos"
+          ]
+        }
+      ],
+      "quantity": 1,
+      "total": 12,
+      "paymentBreakdown": {
+        "dinheiro": 12,
+        "pix": 0,
+        "debito": 0,
+        "credito": 0,
+        "va": 0,
+        "fiado": 0
+      },
+      "mainPaymentMethod": "Dinheiro",
+      "status": "Pago",
+      "notes": "Encomenda entregue (#ENC-004)",
+      "id": "sale-1787872697326",
+      "createdAt": 1787872697326
+    },
+    {
+      "date": "27/08/2026",
+      "month": "Agosto/2026",
+      "clientName": "Adina",
+      "clientId": "client-1787871879262",
+      "category": "Açaí",
+      "items": [
+        {
+          "id": "item-1787871981755",
+          "name": "Açaí Artesanal Copo Pronto (300ml)",
+          "category": "Açaí",
+          "size": "300ml",
+          "unitPrice": 12,
+          "quantity": 1,
+          "total": 12,
+          "toppings": [
+            "Leite Condensado",
+            "Granola Mista",
+            "Leite em Pó Ninho",
+            "Paçoca Rolha",
+            "Amendoim Torrado",
+            "M & M / Confeitos"
+          ]
+        }
+      ],
+      "quantity": 1,
+      "total": 12,
+      "paymentBreakdown": {
+        "dinheiro": 0,
+        "pix": 12,
+        "debito": 0,
+        "credito": 0,
+        "va": 0,
+        "fiado": 0
+      },
+      "mainPaymentMethod": "Pix",
+      "status": "Pago",
+      "notes": "Encomenda entregue (#ENC-003)",
+      "id": "sale-1787872172533",
+      "createdAt": 1787872172533
+    },
+    {
+      "date": "27/08/2026",
+      "month": "Agosto/2026",
+      "clientName": "Ryan Mateus",
+      "clientId": "client-ryan-mateus-1211159",
+      "category": "Açaí",
+      "items": [
+        {
+          "id": "item-ord-1",
+          "name": "Açaí Artesanal Copo Pronto 300ml",
+          "category": "Açaí",
+          "size": "300ml",
+          "unitPrice": 12,
+          "quantity": 1,
+          "total": 12,
+          "toppings": [
+            "Leite Condensado",
+            "Granola Mista",
+            "Leite em Pó Ninho",
+            "Paçoca Rolha",
+            "Amendoim Torrado",
+            "M & M / Confeitos"
+          ]
+        }
+      ],
+      "quantity": 1,
+      "total": 12,
+      "paymentBreakdown": {
+        "dinheiro": 0,
+        "pix": 12,
+        "debito": 0,
+        "credito": 0,
+        "va": 0,
+        "fiado": 0
+      },
+      "mainPaymentMethod": "Pix",
+      "status": "Pago",
+      "notes": "Encomenda entregue (#ENC-001) • Caprichar no Leite Ninho!",
+      "id": "sale-1787871683855",
+      "createdAt": 1787871683855
+    },
+    {
+      "date": "27/08/2026",
+      "month": "Agosto/2026",
+      "clientName": "Ryan Mateus Valesi Torres",
+      "category": "Açaí",
+      "items": [
+        {
+          "id": "item-1787867864407",
+          "name": "Açaí Tradicional 300ml",
+          "category": "Açaí",
+          "size": "300ml",
+          "unitPrice": 12,
+          "quantity": 1,
+          "total": 12,
+          "toppings": [
+            "Leite Condensado",
+            "Granola",
+            "Leite em Pó",
+            "Amendoim Torrado",
+            "M & M / Confeitos",
+            "Leite em Pó Ninho",
+            "Paçoca Rolha",
+            "Granola Mista"
+          ]
+        }
+      ],
+      "quantity": 1,
+      "total": 12,
+      "paymentBreakdown": {
+        "dinheiro": 0,
+        "pix": 12,
+        "debito": 0,
+        "credito": 0,
+        "va": 0,
+        "fiado": 0
+      },
+      "mainPaymentMethod": "Pix",
+      "status": "Pago",
+      "id": "sale-1787867864407",
+      "createdAt": 1787867864407
+    }
+  ],
+  "clients": [
+    {
+      "name": "Adina",
+      "matricula": "1181305",
+      "totalPurchases": 2,
+      "totalSpent": 24,
+      "totalDebt": 0,
+      "status": "Adimplente",
+      "fidelityStamps": 2,
+      "fidelityRewardsClaimed": 0,
+      "id": "client-1787871879262",
+      "createdAt": 1787871879262,
+      "lastPurchaseDate": "27/08/2026"
+    },
+    {
+      "id": "client-1787871683861",
+      "name": "Ryan Mateus",
+      "totalPurchases": 1,
+      "totalSpent": 12,
+      "totalDebt": 0,
+      "status": "Adimplente",
+      "fidelityStamps": 1,
+      "fidelityRewardsClaimed": 0,
+      "lastPurchaseDate": "27/08/2026",
+      "createdAt": 1787871683861
+    },
+    {
+      "id": "client-1787867864418",
+      "name": "Ryan Mateus Valesi Torres",
+      "totalPurchases": 1,
+      "totalSpent": 12,
+      "totalDebt": 0,
+      "status": "Adimplente",
+      "fidelityStamps": 1,
+      "fidelityRewardsClaimed": 0,
+      "lastPurchaseDate": "27/08/2026",
+      "createdAt": 1787867864418
+    }
+  ],
+  "fiados": [],
+  "insumos": [],
+  "expenses": []
+}
