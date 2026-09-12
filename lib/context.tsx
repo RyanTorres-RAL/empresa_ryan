@@ -7,7 +7,7 @@ import {
   CashOut,
   PaymentMethod,
   Product,
-  Role,
+  SessionProfile,
   Theme,
 } from "./types";
 
@@ -17,7 +17,8 @@ export type Screen =
   | "produtos"
   | "clientes"
   | "fiado"
-  | "caixa";
+  | "caixa"
+  | "usuarios";
 
 export interface FinalizeSaleInput {
   cart: CartItem[];
@@ -37,8 +38,13 @@ export interface EditSaleInput {
 export interface AppContextValue {
   data: AppData;
   loadError: string | null;
-  role: Role;
-  setRole: (r: Role) => void;
+  /**
+   * Who is signed in, resolved on the server from Supabase Auth +
+   * crm_profiles. Read-only on purpose: the old "Dono / Funcionário" toggle
+   * is gone, roles come from the database and are re-checked by every Server
+   * Action, so changing this in the browser would buy nobody anything.
+   */
+  profile: SessionProfile;
   screen: Screen;
   setScreen: (s: Screen) => void;
   theme: Theme;

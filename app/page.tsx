@@ -1,9 +1,18 @@
-"use client";
+import { redirect } from "next/navigation";
+import { getSessionProfile } from "@/lib/server/auth";
+import AppShell from "@/components/AppShell";
 
-import dynamic from "next/dynamic";
+export const dynamic = "force-dynamic";
 
-const App = dynamic(() => import("@/components/App"), { ssr: false });
+/**
+ * The app itself. Resolving the profile here (server-side) is what decides
+ * which screens exist for this person — the browser is told the role, it
+ * never picks one. Every action behind those screens is guarded again on the
+ * server (lib/server/auth.ts).
+ */
+export default async function Page() {
+  const profile = await getSessionProfile();
+  if (!profile) redirect("/login");
 
-export default function Page() {
-  return <App />;
+  return <AppShell profile={profile} />;
 }

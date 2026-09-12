@@ -11,6 +11,7 @@ import {
 } from "@/lib/types";
 import { loadAppDataInternal } from "./queries";
 import { brDateToDb, monthLabelFromMs, msToDbDate, msToDbTimestamp } from "./dates";
+import { requireOwner, requireUser } from "./auth";
 
 /**
  * Server Actions for every mutation the app performs. These replace the old
@@ -22,6 +23,25 @@ import { brDateToDb, monthLabelFromMs, msToDbDate, msToDbTimestamp } from "./dat
  * All of this runs with the service_role key (see lib/supabase/server.ts),
  * which is the only way to reach the crm_* tables since they have RLS
  * enabled with zero policies.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * AUTHORIZATION — READ BEFORE ADDING AN ACTION HERE
+ *
+ * Every exported function in this file MUST have a guard as its FIRST
+ * statement, no exceptions:
+ *
+ *     await requireUser();    // any signed-in, active person
+ *     await requireOwner();   // dono only
+ *
+ * These are exported Server Actions: anyone who is signed in can invoke them
+ * directly over HTTP, whether or not the UI shows the button. Hiding a tab in
+ * the nav is cosmetic; this line is the actual protection.
+ *
+ * requireOwner() covers what only the dono may do: products, cash-outs, and
+ * editing or deleting sales (an employee must not be able to rewrite or erase
+ * sales history). Day-to-day work — finalizing a sale, adding a client,
+ * taking a fiado payment — is requireUser().
+ * ─────────────────────────────────────────────────────────────────────────
  */
 
 export type ActionResult = { ok: true; data: AppData } | { ok: false; error: string };
@@ -32,6 +52,7 @@ async function refreshed(): Promise<ActionResult> {
 }
 
 export async function loadAppData(): Promise<AppData> {
+  await requireUser();
   return loadAppDataInternal();
 }
 
@@ -47,6 +68,8 @@ export interface FinalizeSaleActionInput {
 }
 
 export async function finalizeSale(input: FinalizeSaleActionInput): Promise<ActionResult> {
+  await requireUser();
+
   const { cart, clientName, method, fiadoDueDate, notes, now } = input;
 
   if (cart.length === 0) return { ok: false, error: "Adicione itens ao carrinho." };
@@ -170,6 +193,8 @@ export interface EditSaleActionInput {
 }
 
 export async function editSale(input: EditSaleActionInput): Promise<ActionResult> {
+  await requireOwner();
+
   const supabase = getSupabaseServerClient();
 
   const { data: saleRow, error: saleErr } = await supabase
@@ -271,6 +296,8 @@ export async function editSale(input: EditSaleActionInput): Promise<ActionResult
 }
 
 export async function deleteSale(saleId: string): Promise<ActionResult> {
+  await requireOwner();
+
   const supabase = getSupabaseServerClient();
 
   const { data: saleRow, error: saleErr } = await supabase
@@ -343,6 +370,8 @@ export interface SaveProductActionInput {
 }
 
 export async function saveProduct(input: SaveProductActionInput): Promise<ActionResult> {
+  await requireOwner();
+
   if (!input.name.trim()) return { ok: false, error: "Digite o nome do produto." };
 
   const supabase = getSupabaseServerClient();
@@ -366,6 +395,8 @@ export async function saveProduct(input: SaveProductActionInput): Promise<Action
 }
 
 export async function deleteProduct(id: string): Promise<ActionResult> {
+  await requireOwner();
+
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from("crm_products").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
@@ -375,6 +406,8 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
 // ---------- Clients ----------
 
 export async function addClient(name: string, matricula: string): Promise<ActionResult> {
+  await requireUser();
+
   if (!name.trim()) return { ok: false, error: "Digite o nome do cliente." };
 
   const supabase = getSupabaseServerClient();
@@ -404,6 +437,8 @@ export interface RegisterFiadoPaymentActionInput {
 }
 
 export async function registerFiadoPayment(input: RegisterFiadoPaymentActionInput): Promise<ActionResult> {
+  await requireUser();
+
   if (!(input.amount > 0)) return { ok: false, error: "Digite um valor válido." };
 
   const supabase = getSupabaseServerClient();
@@ -472,6 +507,8 @@ export interface SaveCashOutActionInput {
 }
 
 export async function saveCashOut(input: SaveCashOutActionInput): Promise<ActionResult> {
+  await requireOwner();
+
   if (!input.description.trim()) return { ok: false, error: "Digite uma descrição." };
   if (!(input.amount > 0)) return { ok: false, error: "Digite um valor válido." };
 
@@ -495,6 +532,8 @@ export async function saveCashOut(input: SaveCashOutActionInput): Promise<Action
 }
 
 export async function deleteCashOut(id: string): Promise<ActionResult> {
+  await requireOwner();
+
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from("crm_cash_outs").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };

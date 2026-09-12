@@ -15,7 +15,7 @@ import {
   CashOut,
   PaymentMethod,
   Product,
-  Role,
+  SessionProfile,
   Theme,
 } from "@/lib/types";
 import {
@@ -39,6 +39,7 @@ import ProdutosScreen from "./screens/Produtos";
 import ClientesScreen from "./screens/Clientes";
 import FiadoScreen from "./screens/Fiado";
 import CaixaScreen from "./screens/Caixa";
+import UsuariosScreen from "./screens/Usuarios";
 
 let uidCounter = 0;
 function uid(prefix: string): string {
@@ -46,16 +47,16 @@ function uid(prefix: string): string {
   return `${prefix}-${Date.now()}-${uidCounter}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-const OWNER_SCREENS: Screen[] = ["dashboard", "produtos", "caixa"];
 const THEME_STORAGE_KEY = "acai-ryan-theme";
 
-export default function App() {
+export default function App({ profile }: { profile: SessionProfile }) {
+  const role = profile.role;
+
   const [data, setData] = useState<AppData>(() => emptyAppData());
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [theme, setThemeState] = useState<Theme>("light");
-  const [role, setRoleState] = useState<Role>("dono");
-  const [screen, setScreen] = useState<Screen>("dashboard");
+  const [screen, setScreen] = useState<Screen>(role === "dono" ? "dashboard" : "vendas");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
@@ -105,10 +106,22 @@ export default function App() {
     return false;
   }
 
-  function setRole(r: Role) {
-    setRoleState(r);
-    if (r === "funcionario" && OWNER_SCREENS.includes(screen)) {
-      setScreen("vendas");
+  /**
+   * Runs a Server Action and applies its result.
+   *
+   * A rejection here normally means the server guard refused (wrong role, or
+   * the session expired / was deactivated). Next.js hides the real message in
+   * production, so we show one plain-Portuguese explanation instead of
+   * leaving an unhandled rejection in the console.
+   */
+  async function runAction(run: () => Promise<ActionResult>): Promise<boolean> {
+    try {
+      return applyResult(await run());
+    } catch {
+      alertFn(
+        "Você não tem permissão para fazer isso, ou a sua sessão expirou. Recarregue a página e entre novamente."
+      );
+      return false;
     }
   }
 
@@ -164,25 +177,24 @@ export default function App() {
 
   // ---------- Sales ----------
   async function finalizeSale(input: FinalizeSaleInput): Promise<boolean> {
-    const result = await finalizeSaleAction({
-      cart: input.cart.map((c) => ({ name: c.name, price: c.price, quantity: c.quantity })),
-      clientName: input.clientName,
-      method: input.method,
-      fiadoDueDate: input.fiadoDueDate,
-      notes: input.notes,
-      now: Date.now(),
-    });
-    return applyResult(result);
+    return runAction(() =>
+      finalizeSaleAction({
+        cart: input.cart.map((c) => ({ name: c.name, price: c.price, quantity: c.quantity })),
+        clientName: input.clientName,
+        method: input.method,
+        fiadoDueDate: input.fiadoDueDate,
+        notes: input.notes,
+        now: Date.now(),
+      })
+    );
   }
 
   async function editSale(input: EditSaleInput): Promise<void> {
-    const result = await editSaleAction({ ...input, now: Date.now() });
-    applyResult(result);
+    await runAction(() => editSaleAction({ ...input, now: Date.now() }));
   }
 
   async function deleteSale(saleId: string): Promise<void> {
-    const result = await deleteSaleAction(saleId);
-    applyResult(result);
+    await runAction(() => deleteSaleAction(saleId));
   }
 
   // ---------- Products ----------
@@ -191,13 +203,11 @@ export default function App() {
       alertFn("Digite o nome do produto.");
       return false;
     }
-    const result = await saveProductAction(product);
-    return applyResult(result);
+    return runAction(() => saveProductAction(product));
   }
 
   async function deleteProduct(id: string): Promise<void> {
-    const result = await deleteProductAction(id);
-    applyResult(result);
+    await runAction(() => deleteProductAction(id));
   }
 
   // ---------- Clients ----------
@@ -206,8 +216,7 @@ export default function App() {
       alertFn("Digite o nome do cliente.");
       return false;
     }
-    const result = await addClientAction(name, matricula);
-    return applyResult(result);
+    return runAction(() => addClientAction(name, matricula));
   }
 
   // ---------- Fiado ----------
@@ -216,8 +225,7 @@ export default function App() {
       alertFn("Digite um valor válido.");
       return false;
     }
-    const result = await registerFiadoPaymentAction({ fiadoId, amount, method, now: Date.now() });
-    return applyResult(result);
+    return runAction(() => registerFiadoPaymentAction({ fiadoId, amount, method, now: Date.now() }));
   }
 
   // ---------- Caixa ----------
@@ -230,21 +238,18 @@ export default function App() {
       alertFn("Digite um valor válido.");
       return false;
     }
-    const result = await saveCashOutAction(cashOut);
-    return applyResult(result);
+    return runAction(() => saveCashOutAction(cashOut));
   }
 
   async function deleteCashOut(id: string): Promise<void> {
-    const result = await deleteCashOutAction(id);
-    applyResult(result);
+    await runAction(() => deleteCashOutAction(id));
   }
 
   const value: AppContextValue = useMemo(
     () => ({
       data,
       loadError,
-      role,
-      setRole,
+      profile,
       screen,
       setScreen,
       theme,
@@ -267,7 +272,7 @@ export default function App() {
       alert: alertFn,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data, loadError, role, screen, cart, theme]
+    [data, loadError, profile, screen, cart, theme]
   );
 
   if (!loaded) {
@@ -292,6 +297,7 @@ export default function App() {
           {screen === "clientes" && <ClientesScreen />}
           {screen === "fiado" && <FiadoScreen />}
           {screen === "caixa" && role === "dono" && <CaixaScreen />}
+          {screen === "usuarios" && role === "dono" && <UsuariosScreen />}
         </>
       )}
 

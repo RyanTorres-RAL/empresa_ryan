@@ -138,6 +138,40 @@ export interface AppData {
 
 export type Role = "dono" | "funcionario";
 
+export const ROLE_LABELS: Record<Role, string> = {
+  dono: "Dono",
+  funcionario: "Funcionário",
+};
+
+/**
+ * The signed-in person, resolved on the server from Supabase Auth plus their
+ * crm_profiles row (see lib/server/auth.ts). The client receives this
+ * read-only — the role is never chosen in the browser.
+ */
+export interface SessionProfile {
+  userId: string;
+  name: string;
+  email: string;
+  role: Role;
+  active: boolean;
+}
+
+/** Result of an auth/user Server Action that returns no data payload. */
+export type SimpleResult = { ok: true } | { ok: false; error: string };
+
+/** A row of the owner-only "Usuários" screen. */
+export interface ManagedUser {
+  userId: string;
+  name: string;
+  email: string;
+  role: Role;
+  active: boolean;
+  createdAt: number;
+}
+
+/** Result of the owner-only user-management Server Actions. */
+export type UsersResult = { ok: true; users: ManagedUser[] } | { ok: false; error: string };
+
 export function formatBRL(n: number): string {
   return "R$ " + n.toFixed(2).replace(".", ",");
 }

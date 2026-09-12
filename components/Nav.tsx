@@ -1,9 +1,16 @@
 "use client";
 
+import { useTransition } from "react";
 import { useApp } from "@/lib/context";
 import { Screen } from "@/lib/context";
-import { Role } from "@/lib/types";
+import { ROLE_LABELS } from "@/lib/types";
+import { sair } from "@/lib/server/auth-actions";
 
+/**
+ * `owner: true` tabs are only rendered for a dono — but that is cosmetic
+ * only. What actually protects those screens is requireOwner() inside every
+ * Server Action they call (lib/server/actions.ts, lib/server/user-actions.ts).
+ */
 const ALL_TABS: { key: Screen; label: string; owner: boolean }[] = [
   { key: "dashboard", label: "Dashboard", owner: true },
   { key: "vendas", label: "Vendas", owner: false },
@@ -11,11 +18,19 @@ const ALL_TABS: { key: Screen; label: string; owner: boolean }[] = [
   { key: "clientes", label: "Clientes", owner: false },
   { key: "fiado", label: "Fiado", owner: false },
   { key: "caixa", label: "Caixa", owner: true },
+  { key: "usuarios", label: "Usuários", owner: true },
 ];
 
 export default function Nav() {
-  const { role, setRole, screen, setScreen, theme, toggleTheme } = useApp();
-  const tabs = ALL_TABS.filter((t) => role === "dono" || !t.owner);
+  const { profile, screen, setScreen, theme, toggleTheme } = useApp();
+  const [pending, startTransition] = useTransition();
+  const tabs = ALL_TABS.filter((t) => profile.role === "dono" || !t.owner);
+
+  function handleSignOut() {
+    startTransition(async () => {
+      await sair();
+    });
+  }
 
   return (
     <nav className="nav">
@@ -40,21 +55,13 @@ export default function Nav() {
         <button className="btn btn-secondary btn-sm" onClick={toggleTheme}>
           {theme === "dark" ? "Modo claro" : "Modo escuro"}
         </button>
-        <div className="nav-role-group">
-          <span className="nav-role-label">Perfil:</span>
-          <button
-            className={`btn btn-sm ${role === "dono" ? "btn-secondary" : "btn-ghost"}`}
-            onClick={() => setRole("dono" as Role)}
-          >
-            Dono
-          </button>
-          <button
-            className={`btn btn-sm ${role === "funcionario" ? "btn-secondary" : "btn-ghost"}`}
-            onClick={() => setRole("funcionario" as Role)}
-          >
-            Funcionário
-          </button>
+        <div className="nav-user">
+          <span className="nav-user-name">{profile.name}</span>
+          <span className="nav-role-label">{ROLE_LABELS[profile.role]}</span>
         </div>
+        <button className="btn btn-secondary btn-sm" onClick={handleSignOut} disabled={pending}>
+          {pending ? "Saindo…" : "Sair"}
+        </button>
       </div>
     </nav>
   );
