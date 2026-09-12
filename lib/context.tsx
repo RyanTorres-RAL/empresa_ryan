@@ -5,12 +5,9 @@ import {
   AppData,
   CartItem,
   CashOut,
-  Client,
-  Fiado,
   PaymentMethod,
   Product,
   Role,
-  Sale,
   Theme,
 } from "./types";
 
@@ -39,10 +36,12 @@ export interface EditSaleInput {
 
 export interface AppContextValue {
   data: AppData;
+  loadError: string | null;
   role: Role;
   setRole: (r: Role) => void;
   screen: Screen;
   setScreen: (s: Screen) => void;
+  theme: Theme;
   toggleTheme: () => void;
 
   cart: CartItem[];
@@ -51,19 +50,22 @@ export interface AppContextValue {
   removeCartLine: (cartId: string) => void;
   clearCart: () => void;
 
-  finalizeSale: (input: FinalizeSaleInput) => boolean;
-  editSale: (input: EditSaleInput) => void;
-  deleteSale: (saleId: string) => void;
+  // All the mutations below now round-trip to the Postgres-backed Server
+  // Actions in lib/server/actions.ts, so they're async: each resolves once
+  // the write (and a fresh reload of `data`) has completed.
+  finalizeSale: (input: FinalizeSaleInput) => Promise<boolean>;
+  editSale: (input: EditSaleInput) => Promise<void>;
+  deleteSale: (saleId: string) => Promise<void>;
 
-  saveProduct: (product: Omit<Product, "id"> & { id?: string }) => boolean;
-  deleteProduct: (id: string) => void;
+  saveProduct: (product: Omit<Product, "id"> & { id?: string }) => Promise<boolean>;
+  deleteProduct: (id: string) => Promise<void>;
 
-  addClient: (name: string, matricula: string) => boolean;
+  addClient: (name: string, matricula: string) => Promise<boolean>;
 
-  registerFiadoPayment: (fiadoId: string, amount: number, method: PaymentMethod) => boolean;
+  registerFiadoPayment: (fiadoId: string, amount: number, method: PaymentMethod) => Promise<boolean>;
 
-  saveCashOut: (cashOut: Omit<CashOut, "id"> & { id?: string }) => boolean;
-  deleteCashOut: (id: string) => void;
+  saveCashOut: (cashOut: Omit<CashOut, "id"> & { id?: string }) => Promise<boolean>;
+  deleteCashOut: (id: string) => Promise<void>;
 
   confirm: (message: string, onConfirm: () => void) => void;
   alert: (message: string) => void;
@@ -77,11 +79,7 @@ export function useApp(): AppContextValue {
   return ctx;
 }
 
-export function findClientByNameCI(clients: Client[], name: string): Client | undefined {
-  const target = name.trim().toLowerCase();
-  return clients.find((c) => c.name.trim().toLowerCase() === target);
-}
-
-export function findFiadoBySaleId(fiados: Fiado[], saleId: string): Fiado | undefined {
-  return fiados.find((f) => f.saleId === saleId && !f.paid);
-}
+// Note: findClientByNameCI/findFiadoBySaleId used to live here for the
+// client-side reducer in components/App.tsx. That business logic now runs
+// inside the Server Actions (lib/server/actions.ts), against Postgres, so
+// these helpers moved there too (see the comments in finalizeSale/editSale).

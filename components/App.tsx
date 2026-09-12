@@ -1,34 +1,36 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { loadData, saveData } from "@/lib/storage";
+import { useEffect, useMemo, useState } from "react";
+import { emptyAppData } from "@/lib/storage";
 import {
   AppContext,
   AppContextValue,
   EditSaleInput,
   FinalizeSaleInput,
   Screen,
-  findClientByNameCI,
-  findFiadoBySaleId,
 } from "@/lib/context";
 import {
   AppData,
   CartItem,
   CashOut,
-  Client,
-  Fiado,
-  PAYMENT_DISPLAY,
+  PaymentMethod,
   Product,
   Role,
-  Sale,
-  SaleItem,
   Theme,
-  emptyBreakdown,
-  formatDateBR,
-  formatMonthBR,
-  labelToPaymentMethod,
 } from "@/lib/types";
-import { seedData } from "@/lib/storage";
+import {
+  ActionResult,
+  addClient as addClientAction,
+  deleteCashOut as deleteCashOutAction,
+  deleteProduct as deleteProductAction,
+  deleteSale as deleteSaleAction,
+  editSale as editSaleAction,
+  finalizeSale as finalizeSaleAction,
+  loadAppData,
+  registerFiadoPayment as registerFiadoPaymentAction,
+  saveCashOut as saveCashOutAction,
+  saveProduct as saveProductAction,
+} from "@/lib/server/actions";
 import Nav from "./Nav";
 import { AlertDialog, ConfirmDialog } from "./Dialogs";
 import DashboardScreen from "./screens/Dashboard";
@@ -45,34 +47,62 @@ function uid(prefix: string): string {
 }
 
 const OWNER_SCREENS: Screen[] = ["dashboard", "produtos", "caixa"];
+const THEME_STORAGE_KEY = "acai-ryan-theme";
 
 export default function App() {
-  const [data, setData] = useState<AppData>(() => seedData());
+  const [data, setData] = useState<AppData>(() => emptyAppData());
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [theme, setThemeState] = useState<Theme>("light");
   const [role, setRoleState] = useState<Role>("dono");
   const [screen, setScreen] = useState<Screen>("dashboard");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
-  const dataRef = useRef(data);
-  dataRef.current = data;
-
+  // Theme is pure client-side UI preference — never sent to Postgres.
   useEffect(() => {
-    setData(loadData());
-    setLoaded(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    try {
+      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (stored === "light" || stored === "dark") setThemeState(stored);
+    } catch {
+      // ignore privacy-mode / quota errors
+    }
+  }, []);
+
+  // Real data now comes from Supabase via the loadAppData Server Action.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const initial = await loadAppData();
+        if (!cancelled) setData(initial);
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(err instanceof Error ? err.message : "Falha ao carregar dados.");
+        }
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (typeof document !== "undefined") {
-      document.documentElement.setAttribute("data-theme", data.theme);
+      document.documentElement.setAttribute("data-theme", theme);
     }
-  }, [data.theme]);
+  }, [theme]);
 
-  function commit(next: AppData) {
-    setData(next);
-    saveData(next);
+  function applyResult(result: ActionResult): boolean {
+    if (result.ok) {
+      setData(result.data);
+      return true;
+    }
+    alertFn(result.error);
+    return false;
   }
 
   function setRole(r: Role) {
@@ -83,8 +113,15 @@ export default function App() {
   }
 
   function toggleTheme() {
-    const next: Theme = dataRef.current.theme === "dark" ? "light" : "dark";
-    commit({ ...dataRef.current, theme: next });
+    setThemeState((prev) => {
+      const next: Theme = prev === "dark" ? "light" : "dark";
+      try {
+        window.localStorage.setItem(THEME_STORAGE_KEY, next);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
   }
 
   function alertFn(message: string) {
@@ -95,7 +132,7 @@ export default function App() {
     setConfirmState({ message, onConfirm });
   }
 
-  // ---------- Cart ----------
+  // ---------- Cart (transient, never persisted until "Finalizar Venda") ----------
   function addToCart(product: Product) {
     setCart((prev) => {
       const existing = prev.find((c) => c.productId === product.id);
@@ -126,312 +163,65 @@ export default function App() {
   }
 
   // ---------- Sales ----------
-  function finalizeSale(input: FinalizeSaleInput): boolean {
-    const { cart: cartItems, clientName, method, fiadoDueDate, notes } = input;
-
-    if (cartItems.length === 0) {
-      alertFn("Adicione itens ao carrinho.");
-      return false;
-    }
-    if (!clientName.trim()) {
-      alertFn("Digite o nome do cliente.");
-      return false;
-    }
-    if (!method) {
-      alertFn("Escolha a forma de pagamento.");
-      return false;
-    }
-
-    const d = dataRef.current;
-    const now = new Date();
-    const nowMs = Date.now();
-
-    let client = findClientByNameCI(d.clients, clientName);
-    let clients = d.clients;
-    if (!client) {
-      client = {
-        id: uid("client"),
-        name: clientName.trim(),
-        matricula: "",
-        totalPurchases: 0,
-        totalSpent: 0,
-        totalDebt: 0,
-        status: "Adimplente",
-        fidelityStamps: 0,
-        fidelityRewardsClaimed: 0,
-        createdAt: nowMs,
-        lastPurchaseDate: "",
-      };
-      clients = [...clients, client];
-    }
-
-    const saleItems: SaleItem[] = cartItems.map((c) => ({
-      id: uid("item"),
-      name: c.name,
-      unitPrice: c.price,
-      quantity: c.quantity,
-      total: c.price * c.quantity,
-    }));
-    const total = saleItems.reduce((s, i) => s + i.total, 0);
-    const breakdown = emptyBreakdown();
-    breakdown[method] = total;
-
-    const sale: Sale = {
-      id: uid("sale"),
-      date: formatDateBR(now),
-      month: formatMonthBR(now),
-      clientName: client.name,
-      clientId: client.id,
-      items: saleItems,
-      quantity: saleItems.length,
-      total,
-      paymentBreakdown: breakdown,
-      mainPaymentMethod: PAYMENT_DISPLAY[method],
-      status: method === "fiado" ? "Pendente" : "Pago",
-      notes: notes.trim(),
-      createdAt: nowMs,
-    };
-
-    const updatedClient: Client = {
-      ...client,
-      totalPurchases: client.totalPurchases + 1,
-      totalSpent: client.totalSpent + total,
-      fidelityStamps: client.fidelityStamps + 1,
-      lastPurchaseDate: sale.date,
-      totalDebt: method === "fiado" ? client.totalDebt + total : client.totalDebt,
-      status: method === "fiado" ? "Devedor" : client.status,
-    };
-
-    clients = clients.map((c) => (c.id === updatedClient.id ? updatedClient : c));
-
-    let fiados = d.fiados;
-    if (method === "fiado") {
-      const due = fiadoDueDate ?? nowMs + 7 * 24 * 60 * 60 * 1000;
-      const fiado: Fiado = {
-        id: uid("fiado"),
-        clientId: updatedClient.id,
-        clientName: updatedClient.name,
-        saleId: sale.id,
-        amount: total,
-        amountPaid: 0,
-        dueDate: due,
-        paid: false,
-        createdAt: nowMs,
-      };
-      fiados = [...fiados, fiado];
-    }
-
-    commit({ ...d, sales: [sale, ...d.sales], clients, fiados });
-    return true;
-  }
-
-  function editSale(input: EditSaleInput) {
-    const d = dataRef.current;
-    const sale = d.sales.find((s) => s.id === input.saleId);
-    if (!sale) return;
-
-    const oldTotal = sale.total;
-    const oldMethod = labelToPaymentMethod(sale.mainPaymentMethod);
-    const newTotal = input.total;
-    const newMethod = input.method;
-
-    const breakdown = emptyBreakdown();
-    breakdown[newMethod] = newTotal;
-
-    const updatedSale: Sale = {
-      ...sale,
-      total: newTotal,
-      paymentBreakdown: breakdown,
-      mainPaymentMethod: PAYMENT_DISPLAY[newMethod],
+  async function finalizeSale(input: FinalizeSaleInput): Promise<boolean> {
+    const result = await finalizeSaleAction({
+      cart: input.cart.map((c) => ({ name: c.name, price: c.price, quantity: c.quantity })),
+      clientName: input.clientName,
+      method: input.method,
+      fiadoDueDate: input.fiadoDueDate,
       notes: input.notes,
-      status: newMethod === "fiado" ? "Pendente" : "Pago",
-    };
-
-    let clients = d.clients;
-    let fiados = d.fiados;
-    const client = sale.clientId ? clients.find((c) => c.id === sale.clientId) : undefined;
-
-    if (client) {
-      let totalSpent = client.totalSpent + (newTotal - oldTotal);
-      let totalDebt = client.totalDebt;
-      let status = client.status;
-
-      const wasFiado = oldMethod === "fiado";
-      const isFiado = newMethod === "fiado";
-      const existingFiado = findFiadoBySaleId(d.fiados, sale.id);
-
-      if (wasFiado && !isFiado) {
-        if (existingFiado) {
-          const remaining = existingFiado.amount - existingFiado.amountPaid;
-          totalDebt = Math.max(0, totalDebt - remaining);
-          fiados = fiados.filter((f) => f.id !== existingFiado.id);
-        }
-        if (totalDebt <= 0) {
-          totalDebt = 0;
-          status = "Adimplente";
-        }
-      } else if (!wasFiado && isFiado) {
-        const newFiado: Fiado = {
-          id: uid("fiado"),
-          clientId: client.id,
-          clientName: client.name,
-          saleId: sale.id,
-          amount: newTotal,
-          amountPaid: 0,
-          dueDate: Date.now() + 7 * 24 * 60 * 60 * 1000,
-          paid: false,
-          createdAt: Date.now(),
-        };
-        fiados = [...fiados, newFiado];
-        totalDebt = totalDebt + newTotal;
-        status = "Devedor";
-      } else if (wasFiado && isFiado) {
-        const delta = newTotal - oldTotal;
-        if (existingFiado) {
-          fiados = fiados.map((f) =>
-            f.id === existingFiado.id ? { ...f, amount: f.amount + delta } : f
-          );
-        }
-        totalDebt = Math.max(0, totalDebt + delta);
-        status = totalDebt <= 0 ? "Adimplente" : "Devedor";
-      }
-
-      const updatedClient: Client = { ...client, totalSpent, totalDebt, status };
-      clients = clients.map((c) => (c.id === updatedClient.id ? updatedClient : c));
-    }
-
-    const sales = d.sales.map((s) => (s.id === sale.id ? updatedSale : s));
-    commit({ ...d, sales, clients, fiados });
+      now: Date.now(),
+    });
+    return applyResult(result);
   }
 
-  function deleteSale(saleId: string) {
-    const d = dataRef.current;
-    const sale = d.sales.find((s) => s.id === saleId);
-    if (!sale) return;
+  async function editSale(input: EditSaleInput): Promise<void> {
+    const result = await editSaleAction({ ...input, now: Date.now() });
+    applyResult(result);
+  }
 
-    let clients = d.clients;
-    let fiados = d.fiados;
-    const client = sale.clientId ? clients.find((c) => c.id === sale.clientId) : undefined;
-
-    if (client) {
-      let totalPurchases = Math.max(0, client.totalPurchases - 1);
-      let totalSpent = Math.max(0, client.totalSpent - sale.total);
-      let fidelityStamps = Math.max(0, client.fidelityStamps - 1);
-      let totalDebt = client.totalDebt;
-      let status = client.status;
-
-      const existingFiado = findFiadoBySaleId(d.fiados, sale.id);
-      if (existingFiado) {
-        const remaining = existingFiado.amount - existingFiado.amountPaid;
-        totalDebt = Math.max(0, totalDebt - remaining);
-        fiados = fiados.filter((f) => f.id !== existingFiado.id);
-        status = totalDebt <= 0 ? "Adimplente" : "Devedor";
-      }
-
-      const updatedClient: Client = { ...client, totalPurchases, totalSpent, fidelityStamps, totalDebt, status };
-      clients = clients.map((c) => (c.id === updatedClient.id ? updatedClient : c));
-    }
-
-    const sales = d.sales.filter((s) => s.id !== saleId);
-    commit({ ...d, sales, clients, fiados });
+  async function deleteSale(saleId: string): Promise<void> {
+    const result = await deleteSaleAction(saleId);
+    applyResult(result);
   }
 
   // ---------- Products ----------
-  function saveProduct(product: Omit<Product, "id"> & { id?: string }): boolean {
+  async function saveProduct(product: Omit<Product, "id"> & { id?: string }): Promise<boolean> {
     if (!product.name.trim()) {
       alertFn("Digite o nome do produto.");
       return false;
     }
-    const d = dataRef.current;
-    if (product.id) {
-      const products = d.products.map((p) =>
-        p.id === product.id ? { ...p, ...product, id: product.id! } : p
-      );
-      commit({ ...d, products });
-    } else {
-      const newProduct: Product = { ...product, id: uid("prod") };
-      commit({ ...d, products: [...d.products, newProduct] });
-    }
-    return true;
+    const result = await saveProductAction(product);
+    return applyResult(result);
   }
 
-  function deleteProduct(id: string) {
-    const d = dataRef.current;
-    commit({ ...d, products: d.products.filter((p) => p.id !== id) });
+  async function deleteProduct(id: string): Promise<void> {
+    const result = await deleteProductAction(id);
+    applyResult(result);
   }
 
   // ---------- Clients ----------
-  function addClient(name: string, matricula: string): boolean {
+  async function addClient(name: string, matricula: string): Promise<boolean> {
     if (!name.trim()) {
       alertFn("Digite o nome do cliente.");
       return false;
     }
-    const d = dataRef.current;
-    const newClient: Client = {
-      id: uid("client"),
-      name: name.trim(),
-      matricula: matricula.trim(),
-      totalPurchases: 0,
-      totalSpent: 0,
-      totalDebt: 0,
-      status: "Adimplente",
-      fidelityStamps: 0,
-      fidelityRewardsClaimed: 0,
-      createdAt: Date.now(),
-      lastPurchaseDate: "",
-    };
-    commit({ ...d, clients: [...d.clients, newClient] });
-    return true;
+    const result = await addClientAction(name, matricula);
+    return applyResult(result);
   }
 
   // ---------- Fiado ----------
-  function registerFiadoPayment(fiadoId: string, amount: number, method: import("@/lib/types").PaymentMethod): boolean {
+  async function registerFiadoPayment(fiadoId: string, amount: number, method: PaymentMethod): Promise<boolean> {
     if (!(amount > 0)) {
       alertFn("Digite um valor válido.");
       return false;
     }
-    const d = dataRef.current;
-    const fiado = d.fiados.find((f) => f.id === fiadoId);
-    if (!fiado) return false;
-
-    const amountPaid = fiado.amountPaid + amount;
-    const remaining = fiado.amount - amountPaid;
-    const paid = remaining <= 0.009;
-    const updatedFiado: Fiado = {
-      ...fiado,
-      amountPaid,
-      paid,
-      paidAt: paid ? Date.now() : fiado.paidAt,
-    };
-    const fiados = d.fiados.map((f) => (f.id === fiadoId ? updatedFiado : f));
-
-    let clients = d.clients;
-    if (fiado.clientId) {
-      const client = clients.find((c) => c.id === fiado.clientId);
-      if (client) {
-        const totalDebt = Math.max(0, client.totalDebt - amount);
-        const status = totalDebt <= 0 ? "Adimplente" : "Devedor";
-        clients = clients.map((c) => (c.id === client.id ? { ...c, totalDebt, status } : c));
-      }
-    }
-
-    const payment = {
-      id: uid("fiadopay"),
-      fiadoId,
-      clientId: fiado.clientId,
-      clientName: fiado.clientName,
-      amount,
-      method,
-      date: formatDateBR(new Date()),
-      createdAt: Date.now(),
-    };
-
-    commit({ ...d, fiados, clients, fiadoPayments: [...d.fiadoPayments, payment] });
-    return true;
+    const result = await registerFiadoPaymentAction({ fiadoId, amount, method, now: Date.now() });
+    return applyResult(result);
   }
 
   // ---------- Caixa ----------
-  function saveCashOut(cashOut: Omit<CashOut, "id"> & { id?: string }): boolean {
+  async function saveCashOut(cashOut: Omit<CashOut, "id"> & { id?: string }): Promise<boolean> {
     if (!cashOut.description.trim()) {
       alertFn("Digite uma descrição.");
       return false;
@@ -440,31 +230,24 @@ export default function App() {
       alertFn("Digite um valor válido.");
       return false;
     }
-    const d = dataRef.current;
-    if (cashOut.id) {
-      const cashOuts = d.cashOuts.map((c) =>
-        c.id === cashOut.id ? { ...c, ...cashOut, id: cashOut.id! } : c
-      );
-      commit({ ...d, cashOuts });
-    } else {
-      const newCashOut: CashOut = { ...cashOut, id: uid("cashout") };
-      commit({ ...d, cashOuts: [...d.cashOuts, newCashOut] });
-    }
-    return true;
+    const result = await saveCashOutAction(cashOut);
+    return applyResult(result);
   }
 
-  function deleteCashOut(id: string) {
-    const d = dataRef.current;
-    commit({ ...d, cashOuts: d.cashOuts.filter((c) => c.id !== id) });
+  async function deleteCashOut(id: string): Promise<void> {
+    const result = await deleteCashOutAction(id);
+    applyResult(result);
   }
 
   const value: AppContextValue = useMemo(
     () => ({
       data,
+      loadError,
       role,
       setRole,
       screen,
       setScreen,
+      theme,
       toggleTheme,
       cart,
       addToCart,
@@ -484,7 +267,7 @@ export default function App() {
       alert: alertFn,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data, role, screen, cart]
+    [data, loadError, role, screen, cart, theme]
   );
 
   if (!loaded) {
@@ -494,12 +277,23 @@ export default function App() {
   return (
     <AppContext.Provider value={value}>
       <Nav />
-      {screen === "dashboard" && role === "dono" && <DashboardScreen />}
-      {screen === "vendas" && <VendasScreen />}
-      {screen === "produtos" && role === "dono" && <ProdutosScreen />}
-      {screen === "clientes" && <ClientesScreen />}
-      {screen === "fiado" && <FiadoScreen />}
-      {screen === "caixa" && role === "dono" && <CaixaScreen />}
+      {loadError && (
+        <div className="page">
+          <div className="empty-state">
+            Não foi possível carregar os dados do Supabase: {loadError}
+          </div>
+        </div>
+      )}
+      {!loadError && (
+        <>
+          {screen === "dashboard" && role === "dono" && <DashboardScreen />}
+          {screen === "vendas" && <VendasScreen />}
+          {screen === "produtos" && role === "dono" && <ProdutosScreen />}
+          {screen === "clientes" && <ClientesScreen />}
+          {screen === "fiado" && <FiadoScreen />}
+          {screen === "caixa" && role === "dono" && <CaixaScreen />}
+        </>
+      )}
 
       {confirmState && (
         <ConfirmDialog

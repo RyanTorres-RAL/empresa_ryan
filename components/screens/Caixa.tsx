@@ -126,8 +126,8 @@ function CashOutDialog({ cashOut, onClose }: { cashOut: CashOut | null; onClose:
   const [description, setDescription] = useState(cashOut?.description ?? "");
   const [date, setDate] = useState(cashOut ? toInputDate(cashOut.date) : toInputDate(formatDateBR(new Date())));
 
-  function handleSave() {
-    const ok = saveCashOut({
+  async function handleSave() {
+    const ok = await saveCashOut({
       id: cashOut?.id,
       amount: Number(amount) || 0,
       description,

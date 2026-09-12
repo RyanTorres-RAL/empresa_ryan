@@ -49,7 +49,7 @@ export default function VendasScreen() {
     setNotes("");
   }
 
-  function handleFinalizar() {
+  async function handleFinalizar() {
     if (cart.length === 0) {
       alert("Adicione itens ao carrinho.");
       return;
@@ -63,7 +63,7 @@ export default function VendasScreen() {
       return;
     }
     const due = fiadoDueDate ? new Date(fiadoDueDate + "T00:00:00").getTime() : undefined;
-    const ok = finalizeSale({ cart, clientName, method, fiadoDueDate: due, notes });
+    const ok = await finalizeSale({ cart, clientName, method, fiadoDueDate: due, notes });
     if (ok) {
       clearCart();
       resetForm();
@@ -341,13 +341,13 @@ function EditSaleDialog({ sale, onClose }: { sale: Sale; onClose: () => void }) 
   );
   const [notes, setNotes] = useState(sale.notes);
 
-  function handleSave() {
+  async function handleSave() {
     const value = Number(total);
     if (!(value > 0)) {
       alert("Digite um valor válido.");
       return;
     }
-    editSale({ saleId: sale.id, total: value, method, notes });
+    await editSale({ saleId: sale.id, total: value, method, notes });
     onClose();
   }
 

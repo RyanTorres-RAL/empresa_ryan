@@ -14,7 +14,7 @@ const ALL_TABS: { key: Screen; label: string; owner: boolean }[] = [
 ];
 
 export default function Nav() {
-  const { role, setRole, screen, setScreen, data, toggleTheme } = useApp();
+  const { role, setRole, screen, setScreen, theme, toggleTheme } = useApp();
   const tabs = ALL_TABS.filter((t) => role === "dono" || !t.owner);
 
   return (
@@ -38,7 +38,7 @@ export default function Nav() {
 
       <div className="nav-right">
         <button className="btn btn-secondary btn-sm" onClick={toggleTheme}>
-          {data.theme === "dark" ? "Modo claro" : "Modo escuro"}
+          {theme === "dark" ? "Modo claro" : "Modo escuro"}
         </button>
         <div className="nav-role-group">
           <span className="nav-role-label">Perfil:</span>

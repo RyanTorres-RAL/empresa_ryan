@@ -98,8 +98,8 @@ function ProductDialog({ product, onClose }: { product: Product | null; onClose:
     });
   }
 
-  function handleSave() {
-    const ok = saveProduct({
+  async function handleSave() {
+    const ok = await saveProduct({
       id: product?.id,
       name,
       category,

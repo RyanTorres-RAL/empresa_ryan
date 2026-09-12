@@ -124,15 +124,16 @@ export interface CartItem {
 
 export type Theme = "light" | "dark";
 
+// Note: theme is deliberately NOT part of AppData. AppData is the slice of
+// state backed by Postgres (Supabase); theme is pure UI preference that
+// stays client-side (see components/App.tsx), same as before.
 export interface AppData {
-  schemaVersion: number;
   products: Product[];
   clients: Client[];
   sales: Sale[];
   fiados: Fiado[];
   fiadoPayments: FiadoPayment[];
   cashOuts: CashOut[];
-  theme: Theme;
 }
 
 export type Role = "dono" | "funcionario";

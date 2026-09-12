@@ -56,8 +56,8 @@ export default function FiadoScreen() {
         <PaymentDialog
           fiado={payingFiado}
           onClose={() => setPayingFiado(null)}
-          onSubmit={(amount, method) => {
-            if (registerFiadoPayment(payingFiado.id, amount, method)) setPayingFiado(null);
+          onSubmit={async (amount, method) => {
+            if (await registerFiadoPayment(payingFiado.id, amount, method)) setPayingFiado(null);
           }}
         />
       )}

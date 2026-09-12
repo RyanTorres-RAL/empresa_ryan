@@ -154,8 +154,8 @@ export default function ClientesScreen() {
       {newDialogOpen && (
         <NewClientDialog
           onClose={() => setNewDialogOpen(false)}
-          onSave={(name, matricula) => {
-            if (addClient(name, matricula)) setNewDialogOpen(false);
+          onSave={async (name, matricula) => {
+            if (await addClient(name, matricula)) setNewDialogOpen(false);
           }}
         />
       )}
