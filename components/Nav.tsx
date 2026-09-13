@@ -36,9 +36,10 @@ export default function Nav() {
   return (
     <nav className="nav">
       <div className="nav-brand-block">
-        {/* Inlined SVG so the outlines pick up `color` — white here. */}
+        {/* The cup alone: the full lockup is too tall for a bar, and the
+            outlined variant is what reads on the dark purple. */}
         <span className="nav-brand-logo">
-          <Logo size={34} />
+          <Logo variant="mark" height={38} />
         </span>
         <span className="nav-brand-text">
           <span className="nav-brand">Açaí do Ryan</span>

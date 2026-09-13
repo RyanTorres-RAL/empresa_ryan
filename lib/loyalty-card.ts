@@ -221,7 +221,7 @@ export function loyaltyFileName(name: string): string {
 export function loyaltyMessage(name: string, stamps: number): string {
   const s = Math.max(0, Math.min(10, Math.floor(stamps)));
   const first = name.trim().split(/\s+/)[0] || name.trim();
-  const bar = "⭐".repeat(s) + "🤍".repeat(10 - s);
+  const bar = "⭐".repeat(s) + "⚪".repeat(10 - s);
   const missing = 10 - s;
   const selos = missing === 1 ? "1 selo" : `${missing} selos`;
 
@@ -232,7 +232,7 @@ export function loyaltyMessage(name: string, stamps: number): string {
       bar,
       "*10 de 10 selos — cartão completo!*",
       "",
-      `O seu próximo açaí é *por nossa conta*. 💜`,
+      `O seu próximo açaí é *por nossa conta*.`,
       "É só mostrar esta imagem na hora do pedido.",
       "",
       "Obrigado por ser nosso cliente! 🫐",
@@ -242,7 +242,7 @@ export function loyaltyMessage(name: string, stamps: number): string {
 
   if (s === 0) {
     return [
-      `Oi, ${first}! 💜`,
+      `Oi, ${first}!`,
       "",
       "Este é o seu *cartão fidelidade* do Açaí do Ryan.",
       "",
@@ -258,7 +258,7 @@ export function loyaltyMessage(name: string, stamps: number): string {
 
   if (s >= 8) {
     return [
-      `Oi, ${first}! 💜`,
+      `Oi, ${first}!`,
       "",
       bar,
       `*${s} de 10 selos*`,
@@ -271,7 +271,7 @@ export function loyaltyMessage(name: string, stamps: number): string {
 
   if (s >= 5) {
     return [
-      `Oi, ${first}! 💜`,
+      `Oi, ${first}!`,
       "",
       bar,
       `*${s} de 10 selos*`,
@@ -283,7 +283,7 @@ export function loyaltyMessage(name: string, stamps: number): string {
   }
 
   return [
-    `Oi, ${first}! 💜`,
+    `Oi, ${first}!`,
     "",
     "Olha como está o seu *cartão fidelidade*:",
     "",

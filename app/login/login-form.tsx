@@ -30,11 +30,12 @@ export default function LoginForm() {
     <div className="auth-page">
       <aside className="auth-brand-panel">
         <div className="auth-brand-inner">
+          {/* The artwork carries the wordmark, so the shop name is not set in
+              type again next to it. */}
           <span className="auth-brand-logo">
-            <Logo size={76} />
+            <Logo variant="light" height={190} />
           </span>
           <span className="auth-kicker">PDV &amp; CRM</span>
-          <span className="auth-brand">Açaí do Ryan</span>
           <p className="auth-tagline">Sistema de vendas e controle de fiado</p>
         </div>
       </aside>
@@ -42,11 +43,8 @@ export default function LoginForm() {
       <div className="auth-form-panel">
         <form className="auth-card" onSubmit={handleSubmit}>
           <div className="auth-mobile-brand">
-            <Logo size={40} />
-            <span className="nav-brand-text">
-              <span className="auth-brand">Açaí do Ryan</span>
-              <span className="auth-kicker">PDV &amp; CRM</span>
-            </span>
+            <Logo variant="full" height={72} />
+            <span className="auth-kicker">PDV &amp; CRM</span>
           </div>
 
           <h1 className="auth-form-title">Entrar</h1>
