@@ -427,6 +427,48 @@ export async function addClient(name: string, matricula: string): Promise<Action
   return refreshed();
 }
 
+/**
+ * Removes a client. Sales keep their own `client_name`, and the foreign key is
+ * ON DELETE SET NULL, so deleting somebody never erases takings from the sales
+ * history or the caixa — the rows just stop pointing at a client.
+ *
+ * A client who still owes money is refused. Losing the record of a debt is not
+ * something the owner could undo from the UI, and there is already a correct
+ * way to clear it: register the payment in Fiado, or delete the fiado sale.
+ */
+export async function deleteClient(id: string): Promise<ActionResult> {
+  await requireOwner();
+
+  const supabase = getSupabaseServerClient();
+
+  const { data: client, error: readError } = await supabase
+    .from("crm_clients")
+    .select("id, total_debt")
+    .eq("id", id)
+    .maybeSingle();
+  if (readError) return { ok: false, error: readError.message };
+  if (!client) return { ok: false, error: "Cliente não encontrado." };
+
+  const { data: openFiados, error: fiadoError } = await supabase
+    .from("crm_fiados")
+    .select("id")
+    .eq("client_id", id)
+    .eq("paid", false);
+  if (fiadoError) return { ok: false, error: fiadoError.message };
+
+  if ((openFiados?.length ?? 0) > 0 || Number(client.total_debt) > 0) {
+    return {
+      ok: false,
+      error:
+        "Este cliente tem fiado em aberto. Registre o pagamento na aba Fiado antes de excluir.",
+    };
+  }
+
+  const { error } = await supabase.from("crm_clients").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  return refreshed();
+}
+
 // ---------- Fiado ----------
 
 export interface RegisterFiadoPaymentActionInput {

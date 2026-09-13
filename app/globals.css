@@ -1419,3 +1419,12 @@ textarea.input {
     max-width: none;
   }
 }
+
+/* Two actions in one table cell: keep them on one line, and let them wrap
+   rather than widen the column on a phone. */
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}

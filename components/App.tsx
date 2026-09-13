@@ -21,6 +21,7 @@ import {
 import {
   ActionResult,
   addClient as addClientAction,
+  deleteClient as deleteClientAction,
   deleteCashOut as deleteCashOutAction,
   deleteProduct as deleteProductAction,
   deleteSale as deleteSaleAction,
@@ -219,6 +220,10 @@ export default function App({ profile }: { profile: SessionProfile }) {
     return runAction(() => addClientAction(name, matricula));
   }
 
+  async function deleteClient(id: string): Promise<void> {
+    await runAction(() => deleteClientAction(id));
+  }
+
   // ---------- Fiado ----------
   async function registerFiadoPayment(fiadoId: string, amount: number, method: PaymentMethod): Promise<boolean> {
     if (!(amount > 0)) {
@@ -265,6 +270,7 @@ export default function App({ profile }: { profile: SessionProfile }) {
       saveProduct,
       deleteProduct,
       addClient,
+      deleteClient,
       registerFiadoPayment,
       saveCashOut,
       deleteCashOut,

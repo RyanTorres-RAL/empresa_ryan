@@ -17,7 +17,8 @@ import {
 type SortKey = "name" | "totalPurchases" | "totalSpent" | "totalDebt" | "status" | "stamps";
 
 export default function ClientesScreen() {
-  const { data, addClient } = useApp();
+  const { data, addClient, deleteClient, confirm, profile } = useApp();
+  const isOwner = profile.role === "dono";
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<1 | -1>(1);
@@ -143,9 +144,26 @@ export default function ClientesScreen() {
                 </td>
                 <td>{c.fidelityStamps % 10}/10</td>
                 <td>
-                  <button className="btn btn-secondary btn-sm" onClick={() => setDetailClient(c)}>
-                    Ver / Cartão
-                  </button>
+                  <div className="row-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => setDetailClient(c)}>
+                      Ver / Cartão
+                    </button>
+                    {isOwner && (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() =>
+                          confirm(
+                            c.totalPurchases > 0
+                              ? `Excluir ${c.name}? As ${c.totalPurchases} compras continuam no histórico e no caixa, mas deixam de ficar ligadas a este cliente.`
+                              : `Excluir ${c.name}?`,
+                            () => void deleteClient(c.id)
+                          )
+                        }
+                      >
+                        Excluir
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

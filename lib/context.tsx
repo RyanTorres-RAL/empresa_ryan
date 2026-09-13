@@ -67,6 +67,7 @@ export interface AppContextValue {
   deleteProduct: (id: string) => Promise<void>;
 
   addClient: (name: string, matricula: string) => Promise<boolean>;
+  deleteClient: (id: string) => Promise<void>;
 
   registerFiadoPayment: (fiadoId: string, amount: number, method: PaymentMethod) => Promise<boolean>;
 
