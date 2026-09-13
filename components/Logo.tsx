@@ -37,6 +37,7 @@ export default function Logo({
   className?: string;
   title?: string;
 }) {
+
   const { src, ratio } = SOURCES[variant];
   return (
     <img

@@ -35,22 +35,18 @@ export default function SetupForm() {
 
   return (
     <div className="auth-page">
-      <aside className="auth-brand-panel">
+      <div className="auth-shell">
         <div className="auth-brand-inner">
+          {/* The artwork carries the wordmark, so the shop name is not set in
+              type again beneath it. */}
           <span className="auth-brand-logo">
-            <Logo variant="light" height={190} />
+            <Logo variant="light" height={150} />
           </span>
           <span className="auth-kicker">PDV &amp; CRM</span>
           <p className="auth-tagline">Sistema de vendas</p>
         </div>
-      </aside>
 
-      <div className="auth-form-panel">
         <form className="auth-card" onSubmit={handleSubmit}>
-          <div className="auth-mobile-brand">
-            <Logo variant="full" height={72} />
-            <span className="auth-kicker">PDV &amp; CRM</span>
-          </div>
 
           <h1 className="auth-form-title">Primeiro acesso</h1>
           <p className="auth-intro">
