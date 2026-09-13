@@ -23,6 +23,22 @@ export const PAYMENT_DISPLAY: Record<PaymentMethod, string> = {
   fiado: "Fiado",
 };
 
+/**
+ * Compact labels for chart axes. "Cartão de Débito" and "Cartão de Crédito"
+ * both truncate to "Cartão de…" in a bar-chart gutter on a phone, which is
+ * worse than no label — these stay distinct at ~80px. Full names are still
+ * used everywhere the row has the width for them (tooltips, table views,
+ * every other screen).
+ */
+export const PAYMENT_SHORT: Record<PaymentMethod, string> = {
+  dinheiro: "Dinheiro",
+  pix: "PIX",
+  debito: "Débito",
+  credito: "Crédito",
+  va: "Alimentação",
+  fiado: "Fiado",
+};
+
 export function labelToPaymentMethod(label: string): PaymentMethod | null {
   const entry = Object.entries(PAYMENT_DISPLAY).find(([, v]) => v === label);
   if (entry) return entry[0] as PaymentMethod;
@@ -172,8 +188,39 @@ export interface ManagedUser {
 /** Result of the owner-only user-management Server Actions. */
 export type UsersResult = { ok: true; users: ManagedUser[] } | { ok: false; error: string };
 
+/**
+ * pt-BR money: "R$ 1.234,56".
+ *
+ * This used to be `n.toFixed(2).replace(".", ",")`, which produced
+ * "R$ 10612,00" — comma decimal but no thousands separator, so any figure
+ * over a thousand had to be counted digit by digit. The Dashboard's headline
+ * numbers made that impossible to ignore; grouping is what pt-BR actually
+ * means, so it is fixed here rather than only in the charts, and every screen
+ * gets it. The "R$ " prefix stays a plain space (Intl's currency style uses a
+ * non-breaking space, which copies out oddly).
+ */
 export function formatBRL(n: number): string {
-  return "R$ " + n.toFixed(2).replace(".", ",");
+  const safe = Number.isFinite(n) ? n : 0;
+  return (
+    "R$ " +
+    safe.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  );
+}
+
+/** Whole number, pt-BR grouped: 1234 -> "1.234". Used for chart axis ticks. */
+export function formatNumberBR(n: number): string {
+  return Math.round(n).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
+}
+
+/** "12%" / "1,4%" — percentages stay short enough to sit beside a bar. */
+export function formatPercentBR(fraction: number): string {
+  if (!Number.isFinite(fraction)) return "0%";
+  const pct = fraction * 100;
+  const digits = pct > 0 && pct < 10 ? 1 : 0;
+  return `${pct.toLocaleString("pt-BR", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })}%`;
 }
 
 export function formatDateBR(d: Date): string {

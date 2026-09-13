@@ -1,39 +1,142 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useApp } from "@/lib/context";
 import {
+  CustomPeriodInput,
+  PeriodPresetId,
+  addDays,
+  buildPeriodRange,
   computeFiadoPendente,
-  computePaymentMethodTotals,
+  computePaymentMethodTotalsInRange,
+  computePeriodStats,
+  computeRevenueSeries,
   computeSaldoEmCaixa,
-  computeSalesTotalSince,
-  computeTicketMedio,
-  computeTopClients,
+  computeTopClientsInRange,
+  computeTopProductsInRange,
 } from "@/lib/calc";
-import { PAYMENT_LABELS, PaymentMethod, formatBRL, startOfDay } from "@/lib/types";
+import {
+  PAYMENT_LABELS,
+  PAYMENT_SHORT,
+  PaymentMethod,
+  formatBRL,
+  formatNumberBR,
+  formatPercentBR,
+  startOfDay,
+} from "@/lib/types";
+import PeriodFilter from "@/components/charts/PeriodFilter";
+import RankedBarChart, { RankedRow } from "@/components/charts/RankedBarChart";
+import RevenueTimeChart from "@/components/charts/RevenueTimeChart";
+
+const TOP_PRODUCTS = 6;
+const TOP_CLIENTS = 8;
+
+function toInputValue(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
 
 export default function DashboardScreen() {
   const { data } = useApp();
 
-  const now = Date.now();
-  const hoje = computeSalesTotalSince(data, startOfDay(new Date()).getTime());
-  const ultimos7 = computeSalesTotalSince(data, now - 7 * 24 * 60 * 60 * 1000);
-  const ultimos30 = computeSalesTotalSince(data, now - 30 * 24 * 60 * 60 * 1000);
-  const ticketMedio = computeTicketMedio(data);
+  const [preset, setPreset] = useState<PeriodPresetId>("30d");
+  const [custom, setCustom] = useState<CustomPeriodInput>(() => {
+    const today = startOfDay(new Date());
+    return { from: toInputValue(addDays(today, -29)), to: toInputValue(today) };
+  });
+
+  const range = useMemo(() => buildPeriodRange(preset, custom), [preset, custom]);
+
+  const stats = useMemo(() => computePeriodStats(data, range), [data, range]);
+  const series = useMemo(() => computeRevenueSeries(data, range), [data, range]);
+  const payments = useMemo(
+    () => computePaymentMethodTotalsInRange(data, range),
+    [data, range],
+  );
+  const products = useMemo(
+    () => computeTopProductsInRange(data, range, TOP_PRODUCTS),
+    [data, range],
+  );
+  const clients = useMemo(
+    () => computeTopClientsInRange(data, range, TOP_CLIENTS),
+    [data, range],
+  );
+
+  // Two of the six tiles are snapshots, not period sums: what the shop is owed
+  // right now and what is in the till right now. Their sub-label says so, so
+  // they are never read as "in the selected period".
   const fiadoPendente = computeFiadoPendente(data);
   const saldoEmCaixa = computeSaldoEmCaixa(data);
 
-  const paymentTotals = computePaymentMethodTotals(data);
-  const paymentSum = (Object.values(paymentTotals) as number[]).reduce((s, v) => s + v, 0);
-  const topClients = computeTopClients(data, 5);
-
-  const stats = [
-    { label: "Hoje", value: hoje },
-    { label: "Últimos 7 dias", value: ultimos7 },
-    { label: "Últimos 30 dias", value: ultimos30 },
-    { label: "Ticket médio", value: ticketMedio },
-    { label: "Fiado pendente", value: fiadoPendente },
-    { label: "Saldo em caixa", value: saldoEmCaixa },
+  const tiles = [
+    { label: "Faturamento", value: formatBRL(stats.faturamento), sub: range.label },
+    { label: "Vendas", value: formatNumberBR(stats.vendas), sub: range.label },
+    { label: "Ticket médio", value: formatBRL(stats.ticketMedio), sub: range.label },
+    { label: "Entradas em caixa", value: formatBRL(stats.entradas), sub: range.label },
+    { label: "Fiado pendente", value: formatBRL(fiadoPendente), sub: "em aberto hoje" },
+    { label: "Saldo em caixa", value: formatBRL(saldoEmCaixa), sub: "acumulado" },
   ];
+
+  const paymentSum = (Object.values(payments) as number[]).reduce((s, v) => s + v, 0);
+  const paymentOrder = (Object.keys(payments) as PaymentMethod[]).sort(
+    (a, b) => payments[b] - payments[a],
+  );
+
+  const paymentRows: RankedRow[] = paymentOrder.map((key) => ({
+    key,
+    label: PAYMENT_SHORT[key],
+    fullLabel: PAYMENT_LABELS[key],
+    value: payments[key],
+    valueText: formatBRL(payments[key]),
+    tooltip: [
+      { label: "no período", value: formatBRL(payments[key]) },
+      {
+        label: "do total recebido",
+        value: formatPercentBR(paymentSum > 0 ? payments[key] / paymentSum : 0),
+      },
+    ],
+  }));
+
+  const paymentTable = paymentOrder.map((key) => [
+    PAYMENT_LABELS[key],
+    formatBRL(payments[key]),
+    formatPercentBR(paymentSum > 0 ? payments[key] / paymentSum : 0),
+  ]);
+
+  const productRows: RankedRow[] = products.rows.map((p) => ({
+    key: p.key,
+    label: p.name,
+    fullLabel: p.name,
+    value: p.revenue,
+    valueText: formatBRL(p.revenue),
+    tooltip: [
+      { label: "faturamento", value: formatBRL(p.revenue) },
+      {
+        label: p.quantity === 1 ? "unidade vendida" : "unidades vendidas",
+        value: formatNumberBR(p.quantity),
+      },
+    ],
+  }));
+
+  const productTable = products.rows.map((p) => [
+    p.name,
+    formatBRL(p.revenue),
+    formatNumberBR(p.quantity),
+  ]);
+  if (products.outrosRevenue > 0) {
+    const rest = products.distinct - products.rows.length;
+    productTable.push([
+      `Outros (${rest} ${rest === 1 ? "produto" : "produtos"})`,
+      formatBRL(products.outrosRevenue),
+      "—",
+    ]);
+  }
+
+  const productSubtitle =
+    products.distinct > products.rows.length
+      ? `Top ${products.rows.length} de ${products.distinct} produtos · ${range.label}`
+      : `${products.distinct} ${products.distinct === 1 ? "produto" : "produtos"} · ${range.label}`;
 
   return (
     <div className="page">
@@ -42,55 +145,81 @@ export default function DashboardScreen() {
         <div className="subtitle">Visão geral das vendas e finanças</div>
       </div>
 
-      <div className="grid grid-cards" style={{ marginBottom: "var(--space-6)" }}>
-        {stats.map((s) => (
-          <div className="card" key={s.label}>
-            <span className="card-kicker">{s.label}</span>
-            <span className="stat-value">{formatBRL(s.value)}</span>
+      <PeriodFilter
+        preset={preset}
+        onPresetChange={setPreset}
+        custom={custom}
+        onCustomChange={setCustom}
+        rangeLabel={range.label}
+      />
+
+      <div className="grid grid-stats" style={{ marginBottom: "var(--space-6)" }}>
+        {tiles.map((t) => (
+          <div className="card stat-tile" key={t.label}>
+            <span className="card-kicker">{t.label}</span>
+            <span className="stat-value">{t.value}</span>
+            <span className="stat-sub">{t.sub}</span>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-2">
-        <div className="card">
-          <span className="card-title">Vendas por forma de pagamento</span>
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", marginTop: "var(--space-2)" }}>
-            {(Object.keys(paymentTotals) as PaymentMethod[]).map((key) => {
-              const value = paymentTotals[key];
-              const pct = paymentSum > 0 ? (value / paymentSum) * 100 : 0;
-              return (
-                <div key={key}>
-                  <div className="card-row" style={{ marginBottom: 4 }}>
-                    <span>{PAYMENT_LABELS[key]}</span>
-                    <span className="muted">{formatBRL(value)}</span>
-                  </div>
-                  <div className="bar-track">
-                    <div className="bar-fill" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="card">
-          <span className="card-title">Clientes mais frequentes</span>
-          {topClients.length === 0 ? (
-            <div className="empty-state">Nenhum cliente ainda.</div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
-              {topClients.map((c) => (
-                <div key={c.id} className="card-row">
-                  <span>{c.name}</span>
-                  <span className="muted">
-                    {c.totalPurchases} compras · {formatBRL(c.totalSpent)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      <div style={{ marginBottom: "var(--space-4)" }}>
+        <RevenueTimeChart series={series} periodLabel={range.label} />
       </div>
+
+      <div className="grid grid-2" style={{ marginBottom: "var(--space-4)" }}>
+        <RankedBarChart
+          title="Vendas por forma de pagamento"
+          subtitle={`${range.label} · valores em R$`}
+          rows={paymentRows}
+          tableCaption={`Vendas por forma de pagamento — ${range.label}`}
+          tableHead={["Forma de pagamento", "Valor", "Participação"]}
+          tableRows={paymentTable}
+        />
+
+        <RankedBarChart
+          title="Produtos que mais faturam"
+          subtitle={productSubtitle}
+          rows={productRows}
+          tableCaption={`Produtos que mais faturam — ${range.label}`}
+          tableHead={["Produto", "Faturamento", "Unidades"]}
+          tableRows={productTable}
+          emptyText="Nenhum produto vendido no período"
+        />
+      </div>
+
+      <section className="card">
+        <div className="chart-head">
+          <h2 className="card-title chart-title">Clientes que mais compraram</h2>
+          <p className="chart-sub">{range.label}</p>
+        </div>
+        {clients.length === 0 ? (
+          <div className="chart-empty" style={{ minHeight: 96 }}>
+            <span>Nenhuma venda no período</span>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th className="num-cell">Compras</th>
+                  <th className="num-cell">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clients.map((c) => (
+                  <tr key={c.key}>
+                    <td>{c.name}</td>
+                    <td className="num-cell">{formatNumberBR(c.sales)}</td>
+                    <td className="num-cell">{formatBRL(c.revenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
