@@ -65,8 +65,14 @@ export interface AppContextValue {
 
   saveProduct: (product: Omit<Product, "id"> & { id?: string }) => Promise<boolean>;
   deleteProduct: (id: string) => Promise<void>;
+  /**
+   * Manual stock correction, owner-only on the server. `delta` is signed:
+   * +10 for "fiz mais", -2 for "quebrei". The decrement that follows a sale is
+   * not this — it happens inside finalizeSale and works for employees too.
+   */
+  adjustProductStock: (id: string, delta: number) => Promise<boolean>;
 
-  addClient: (name: string, matricula: string) => Promise<boolean>;
+  addClient: (name: string, whatsapp: string) => Promise<boolean>;
   deleteClient: (id: string) => Promise<void>;
 
   registerFiadoPayment: (fiadoId: string, amount: number, method: PaymentMethod) => Promise<boolean>;

@@ -9,6 +9,7 @@ import {
   emptyBreakdown,
   labelToPaymentMethod,
 } from "@/lib/types";
+import { normalizeWhatsapp } from "@/lib/phone";
 import { loadAppDataInternal } from "./queries";
 import { brDateToDb, monthLabelFromMs, msToDbDate, msToDbTimestamp } from "./dates";
 import { requireOwner, requireUser } from "./auth";
@@ -37,10 +38,16 @@ import { requireOwner, requireUser } from "./auth";
  * directly over HTTP, whether or not the UI shows the button. Hiding a tab in
  * the nav is cosmetic; this line is the actual protection.
  *
- * requireOwner() covers what only the dono may do: products, cash-outs, and
- * editing or deleting sales (an employee must not be able to rewrite or erase
- * sales history). Day-to-day work — finalizing a sale, adding a client,
- * taking a fiado payment — is requireUser().
+ * requireOwner() covers what only the dono may do: products (including manual
+ * stock corrections), cash-outs, and editing or deleting sales (an employee
+ * must not be able to rewrite or erase sales history). Day-to-day work —
+ * finalizing a sale, adding a client, taking a fiado payment — is
+ * requireUser().
+ *
+ * Watch the seam between those two where stock is concerned: the automatic
+ * decrement when a sale is finalized belongs to the SALE, so it happens inside
+ * finalizeSale under requireUser() and works for employees. Only the manual
+ * "+10 / -2" correction (adjustProductStock) is owner-only.
  * ─────────────────────────────────────────────────────────────────────────
  */
 
@@ -51,6 +58,44 @@ async function refreshed(): Promise<ActionResult> {
   return { ok: true, data };
 }
 
+/**
+ * Applies signed stock deltas keyed by product id, as a read-modify-write.
+ * Negative deltas sell units, positive ones give them back.
+ *
+ * NOT clamped at zero, on purpose: overselling is allowed (see Product.stock),
+ * so a sale that takes a product to -2 stores -2 and the Produtos/Vendas cards
+ * flag it for recounting.
+ *
+ * Write errors are deliberately swallowed. Both callers run this *after* the
+ * sale they belong to is already committed, and there is no transaction
+ * spanning the two (PostgREST, as everywhere else in this file). Reporting a
+ * stock error as a failed sale would invite the owner to ring the same sale up
+ * a second time — a duplicate sale is far worse than a count that drifted by a
+ * few units, which the owner fixes from the Produtos screen in two taps.
+ */
+async function applyStockDeltas(
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  deltas: Map<string, number>
+): Promise<void> {
+  const ids = [...deltas.keys()].filter((id) => !!id);
+  if (ids.length === 0) return;
+
+  const { data: rows, error } = await supabase
+    .from("crm_products")
+    .select("id, stock")
+    .in("id", ids);
+  if (error || !rows) return;
+
+  await Promise.all(
+    rows.map((row) => {
+      const delta = deltas.get(row.id) ?? 0;
+      if (delta === 0) return Promise.resolve();
+      const next = Math.trunc(Number(row.stock) || 0) + delta;
+      return supabase.from("crm_products").update({ stock: next }).eq("id", row.id);
+    })
+  );
+}
+
 export async function loadAppData(): Promise<AppData> {
   await requireUser();
   return loadAppDataInternal();
@@ -59,7 +104,12 @@ export async function loadAppData(): Promise<AppData> {
 // ---------- Sales ----------
 
 export interface FinalizeSaleActionInput {
-  cart: { name: string; price: number; quantity: number }[];
+  /**
+   * `productId` is carried through only to move stock — crm_sale_items stores
+   * the item's name and price, never a product reference, so the sale record
+   * itself is unchanged and still survives a product being renamed or deleted.
+   */
+  cart: { productId: string; name: string; price: number; quantity: number }[];
   clientName: string;
   method: PaymentMethod;
   fiadoDueDate?: number;
@@ -90,7 +140,9 @@ export async function finalizeSale(input: FinalizeSaleActionInput): Promise<Acti
       .from("crm_clients")
       .insert({
         name: clientName.trim(),
-        matricula: "",
+        // Nobody typed a number at the till; the client detail dialog is where
+        // one gets added later.
+        whatsapp: "",
         total_purchases: 0,
         total_spent: 0,
         total_debt: 0,
@@ -147,6 +199,23 @@ export async function finalizeSale(input: FinalizeSaleActionInput): Promise<Acti
   );
   if (itemsErr) return { ok: false, error: itemsErr.message };
 
+  // Stock follows the sale: each product loses the quantity sold.
+  //
+  // This sits inside finalizeSale, under requireUser() — NOT requireOwner().
+  // Employees ring up sales, so the count has to move for them too. The
+  // owner-only path is adjustProductStock, the manual correction below.
+  //
+  // Nothing is clamped: if the count goes negative the sale still records, and
+  // the screens flag the product for recounting. The Vendas screen warns the
+  // person before they finalize, but never blocks them.
+  const soldByProduct = new Map<string, number>();
+  for (const line of cart) {
+    if (!line.productId) continue;
+    const sold = Math.trunc(line.quantity) || 0;
+    soldByProduct.set(line.productId, (soldByProduct.get(line.productId) ?? 0) - sold);
+  }
+  await applyStockDeltas(supabase, soldByProduct);
+
   const newTotalPurchases = (clientRow.total_purchases ?? 0) + 1;
   const newTotalSpent = Number(clientRow.total_spent ?? 0) + total;
   const newFidelityStamps = (clientRow.fidelity_stamps ?? 0) + 1;
@@ -192,6 +261,16 @@ export interface EditSaleActionInput {
   now: number;
 }
 
+/**
+ * Edits a finalized sale's money and paperwork only: total, payment method and
+ * notes (plus the fiado bookkeeping those imply).
+ *
+ * NO STOCK EFFECT, and that is not an oversight. This function never reads or
+ * writes crm_sale_items — the line items, and therefore the quantities that
+ * came off the shelf, are exactly what they were. Correcting a total after the
+ * fact does not put a cup back in the freezer. The only two things that move
+ * stock are finalizeSale (down) and deleteSale (back up).
+ */
 export async function editSale(input: EditSaleActionInput): Promise<ActionResult> {
   await requireOwner();
 
@@ -295,6 +374,10 @@ export async function editSale(input: EditSaleActionInput): Promise<ActionResult
   return refreshed();
 }
 
+/**
+ * Deletes a sale and undoes everything it did — including putting its units
+ * back on the shelf (the mirror of the decrement in finalizeSale).
+ */
 export async function deleteSale(saleId: string): Promise<ActionResult> {
   await requireOwner();
 
@@ -307,6 +390,13 @@ export async function deleteSale(saleId: string): Promise<ActionResult> {
     .maybeSingle();
   if (saleErr) return { ok: false, error: saleErr.message };
   if (!saleRow) return refreshed();
+
+  // Read the line items BEFORE the delete: crm_sale_items cascades away with
+  // the sale, and these quantities are what has to go back into stock.
+  const { data: itemRows } = await supabase
+    .from("crm_sale_items")
+    .select("name, quantity")
+    .eq("sale_id", saleId);
 
   if (saleRow.client_id) {
     const { data: clientRow } = await supabase
@@ -355,6 +445,29 @@ export async function deleteSale(saleId: string): Promise<ActionResult> {
   const { error: deleteErr } = await supabase.from("crm_sales").delete().eq("id", saleId);
   if (deleteErr) return { ok: false, error: deleteErr.message };
 
+  // Give the units back.
+  //
+  // crm_sale_items records the item's NAME and no product id, so the product
+  // has to be matched by name (trimmed, case-insensitively). A line whose
+  // product was since renamed or deleted matches nothing and is skipped —
+  // silently doing nothing beats crediting somebody else's product.
+  if (itemRows && itemRows.length > 0) {
+    const { data: productRows } = await supabase.from("crm_products").select("id, name");
+    const idByName = new Map<string, string>();
+    for (const p of productRows ?? []) {
+      idByName.set(String(p.name).trim().toLowerCase(), p.id);
+    }
+
+    const restored = new Map<string, number>();
+    for (const item of itemRows) {
+      const productId = idByName.get(String(item.name).trim().toLowerCase());
+      if (!productId) continue;
+      const qty = Math.trunc(Number(item.quantity) || 0);
+      restored.set(productId, (restored.get(productId) ?? 0) + qty);
+    }
+    await applyStockDeltas(supabase, restored);
+  }
+
   return refreshed();
 }
 
@@ -367,6 +480,8 @@ export interface SaveProductActionInput {
   size: string;
   price: number;
   complements: string[];
+  /** Opening count, used when CREATING a product. Ignored on edit — see below. */
+  stock?: number;
 }
 
 export async function saveProduct(input: SaveProductActionInput): Promise<ActionResult> {
@@ -384,12 +499,57 @@ export async function saveProduct(input: SaveProductActionInput): Promise<Action
   };
 
   if (input.id) {
+    // Note what is NOT here: `stock`.
+    //
+    // Editing a product changes its name, size, price and complements. If the
+    // update also wrote back the stock number the dialog was opened with, then
+    // fixing a typo in a price would silently undo every sale rung up while
+    // the dialog sat open. Stock moves through exactly two doors — a sale, and
+    // adjustProductStock — so it cannot be clobbered by an unrelated edit.
     const { error } = await supabase.from("crm_products").update(payload).eq("id", input.id);
     if (error) return { ok: false, error: error.message };
   } else {
-    const { error } = await supabase.from("crm_products").insert(payload);
+    const { error } = await supabase
+      .from("crm_products")
+      .insert({ ...payload, stock: Math.trunc(input.stock ?? 0) || 0 });
     if (error) return { ok: false, error: error.message };
   }
+
+  return refreshed();
+}
+
+/**
+ * The manual stock correction: "+10 fiz mais", "-2 quebrei".
+ *
+ * OWNER ONLY, consistent with the rest of the Produtos screen — an employee
+ * must not be able to rewrite the counts. The automatic movement that happens
+ * when a sale is finalized is a different thing entirely and lives inside
+ * finalizeSale under requireUser(), so employees can still sell.
+ *
+ * `delta` is signed and the result is not clamped: taking the count negative
+ * on purpose is allowed, same as overselling.
+ */
+export async function adjustProductStock(id: string, delta: number): Promise<ActionResult> {
+  await requireOwner();
+
+  const step = Math.trunc(delta);
+  if (!Number.isFinite(step) || step === 0) {
+    return { ok: false, error: "Digite uma quantidade diferente de zero." };
+  }
+
+  const supabase = getSupabaseServerClient();
+
+  const { data: row, error: readErr } = await supabase
+    .from("crm_products")
+    .select("id, stock")
+    .eq("id", id)
+    .maybeSingle();
+  if (readErr) return { ok: false, error: readErr.message };
+  if (!row) return { ok: false, error: "Produto não encontrado." };
+
+  const next = Math.trunc(Number(row.stock) || 0) + step;
+  const { error } = await supabase.from("crm_products").update({ stock: next }).eq("id", id);
+  if (error) return { ok: false, error: error.message };
 
   return refreshed();
 }
@@ -405,15 +565,25 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
 
 // ---------- Clients ----------
 
-export async function addClient(name: string, matricula: string): Promise<ActionResult> {
+/**
+ * `whatsapp` is optional and is normalised to digits-with-country-code here,
+ * on the server, so nothing can reach the column by another route — the
+ * browser is not the only caller a Server Action can have. An unusable value
+ * that is not simply blank is refused rather than stored as junk, because the
+ * whole point of the field is that the loyalty card can dial it.
+ */
+export async function addClient(name: string, whatsapp: string): Promise<ActionResult> {
   await requireUser();
 
   if (!name.trim()) return { ok: false, error: "Digite o nome do cliente." };
 
+  const phone = normalizeWhatsapp(whatsapp);
+  if (!phone.ok) return { ok: false, error: phone.error };
+
   const supabase = getSupabaseServerClient();
   const { error } = await supabase.from("crm_clients").insert({
     name: name.trim(),
-    matricula: matricula.trim(),
+    whatsapp: phone.digits,
     total_purchases: 0,
     total_spent: 0,
     total_debt: 0,

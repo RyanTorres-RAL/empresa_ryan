@@ -35,6 +35,9 @@ function mapProduct(row: any): Product {
     size: row.size ?? "",
     price: toNumber(row.price),
     complements: row.complements ?? [],
+    // Integer column, and negative is a legitimate value (see Product.stock),
+    // so this only guards against null/undefined — it must not clamp at zero.
+    stock: Math.trunc(toNumber(row.stock)),
   };
 }
 
@@ -43,7 +46,7 @@ function mapClient(row: any): Client {
   return {
     id: row.id,
     name: row.name,
-    matricula: row.matricula ?? "",
+    whatsapp: row.whatsapp ?? "",
     totalPurchases: row.total_purchases ?? 0,
     totalSpent: toNumber(row.total_spent),
     totalDebt: toNumber(row.total_debt),

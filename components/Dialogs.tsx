@@ -37,7 +37,9 @@ export function ConfirmDialog({
 }) {
   return (
     <Dialog onClose={onCancel} title="Confirmar" size="sm">
-      <p style={{ marginBottom: 0 }}>{message}</p>
+      {/* pre-line so a message can lay itself out as a short list — the
+          low-stock warning names one product per line. */}
+      <p style={{ marginBottom: 0, whiteSpace: "pre-line" }}>{message}</p>
       <div className="dialog-actions">
         <button className="btn btn-secondary" onClick={onCancel}>
           Cancelar

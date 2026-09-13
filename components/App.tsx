@@ -21,6 +21,7 @@ import {
 import {
   ActionResult,
   addClient as addClientAction,
+  adjustProductStock as adjustProductStockAction,
   deleteClient as deleteClientAction,
   deleteCashOut as deleteCashOutAction,
   deleteProduct as deleteProductAction,
@@ -180,7 +181,13 @@ export default function App({ profile }: { profile: SessionProfile }) {
   async function finalizeSale(input: FinalizeSaleInput): Promise<boolean> {
     return runAction(() =>
       finalizeSaleAction({
-        cart: input.cart.map((c) => ({ name: c.name, price: c.price, quantity: c.quantity })),
+        // productId travels with each line purely so the server can move stock.
+        cart: input.cart.map((c) => ({
+          productId: c.productId,
+          name: c.name,
+          price: c.price,
+          quantity: c.quantity,
+        })),
         clientName: input.clientName,
         method: input.method,
         fiadoDueDate: input.fiadoDueDate,
@@ -211,13 +218,22 @@ export default function App({ profile }: { profile: SessionProfile }) {
     await runAction(() => deleteProductAction(id));
   }
 
+  async function adjustProductStock(id: string, delta: number): Promise<boolean> {
+    const step = Math.trunc(delta);
+    if (!Number.isFinite(step) || step === 0) {
+      alertFn("Digite uma quantidade diferente de zero.");
+      return false;
+    }
+    return runAction(() => adjustProductStockAction(id, step));
+  }
+
   // ---------- Clients ----------
-  async function addClient(name: string, matricula: string): Promise<boolean> {
+  async function addClient(name: string, whatsapp: string): Promise<boolean> {
     if (!name.trim()) {
       alertFn("Digite o nome do cliente.");
       return false;
     }
-    return runAction(() => addClientAction(name, matricula));
+    return runAction(() => addClientAction(name, whatsapp));
   }
 
   async function deleteClient(id: string): Promise<void> {
@@ -269,6 +285,7 @@ export default function App({ profile }: { profile: SessionProfile }) {
       deleteSale,
       saveProduct,
       deleteProduct,
+      adjustProductStock,
       addClient,
       deleteClient,
       registerFiadoPayment,

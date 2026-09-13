@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/lib/context";
 import { Dialog } from "../Dialogs";
 import { Client, formatBRL } from "@/lib/types";
+import { formatWhatsappBR } from "@/lib/phone";
 import {
   CARD_H,
   CARD_W,
@@ -181,8 +182,8 @@ export default function ClientesScreen() {
       {newDialogOpen && (
         <NewClientDialog
           onClose={() => setNewDialogOpen(false)}
-          onSave={async (name, matricula) => {
-            if (await addClient(name, matricula)) setNewDialogOpen(false);
+          onSave={async (name, whatsapp) => {
+            if (await addClient(name, whatsapp)) setNewDialogOpen(false);
           }}
         />
       )}
@@ -199,25 +200,38 @@ function NewClientDialog({
   onSave,
 }: {
   onClose: () => void;
-  onSave: (name: string, matricula: string) => void;
+  onSave: (name: string, whatsapp: string) => void;
 }) {
   const [name, setName] = useState("");
-  const [matricula, setMatricula] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
   return (
     <Dialog onClose={onClose} title="Novo cliente" size="sm">
       <div className="field">
         <label>Nome</label>
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
+      {/* Never required: somebody who walks up and will not give a number must
+          not be stuck at the counter. type/inputMode bring up the phone keypad
+          on a phone; the value is normalised on the server (lib/phone.ts), so
+          any way of typing it is accepted here. */}
       <div className="field">
-        <label>Matrícula / Documento</label>
-        <input className="input" value={matricula} onChange={(e) => setMatricula(e.target.value)} />
+        <label>WhatsApp (opcional)</label>
+        <input
+          className="input"
+          type="tel"
+          inputMode="numeric"
+          autoComplete="tel"
+          placeholder="(62) 99999-9999"
+          value={whatsapp}
+          onChange={(e) => setWhatsapp(e.target.value)}
+        />
+        <span className="field-hint">Usado para mandar o cartão fidelidade direto na conversa.</span>
       </div>
       <div className="dialog-actions">
         <button className="btn btn-secondary" onClick={onClose}>
           Cancelar
         </button>
-        <button className="btn btn-primary" onClick={() => onSave(name, matricula)}>
+        <button className="btn btn-primary" onClick={() => onSave(name, whatsapp)}>
           Salvar
         </button>
       </div>
@@ -235,7 +249,8 @@ function ClientDetailDialog({ client, onClose }: { client: Client; onClose: () =
   const [waUrl, setWaUrl] = useState<string | null>(null);
   const previewRef = useRef<HTMLCanvasElement>(null);
 
-  const cardData = { name: client.name, stamps };
+  // The number rides along so the share link can open this person's chat.
+  const cardData = { name: client.name, stamps, whatsapp: client.whatsapp };
 
   useEffect(() => {
     if (previewRef.current) void drawLoyaltyCard(previewRef.current, { name: client.name, stamps });
@@ -269,10 +284,17 @@ function ClientDetailDialog({ client, onClose }: { client: Client; onClose: () =
       const outcome = await shareLoyaltyCard(cardData);
       if (outcome.kind === "fallback") {
         setWaUrl(outcome.popupBlocked ? outcome.waUrl : null);
+        // Four different situations, four different next steps for the owner:
+        // with a number on file the conversation is already open, so the only
+        // thing left is attaching the image; without one they still have to
+        // pick the person.
+        const first = outcome.popupBlocked
+          ? "A imagem foi baixada. O navegador bloqueou a aba do WhatsApp — use o link abaixo"
+          : "A imagem foi baixada e o WhatsApp abriu em outra aba";
         setShareHint(
-          outcome.popupBlocked
-            ? "A imagem foi baixada. O navegador bloqueou a aba do WhatsApp — use o link abaixo e anexe a imagem à conversa."
-            : "A imagem foi baixada e o WhatsApp abriu em outra aba. Escolha a conversa e anexe a imagem que acabou de baixar."
+          outcome.targeted
+            ? `${first}: a conversa de ${client.name.trim().split(/\s+/)[0]} já está aberta, é só anexar a imagem que acabou de baixar.`
+            : `${first}. Escolha a conversa e anexe a imagem que acabou de baixar. Dica: cadastre o WhatsApp deste cliente para abrir a conversa dele direto.`
         );
       } else if (outcome.kind === "error") {
         alert(outcome.message);
@@ -289,6 +311,24 @@ function ClientDetailDialog({ client, onClose }: { client: Client; onClose: () =
         <span className="muted">{client.totalPurchases} compras</span>
         <span className="muted">{formatBRL(client.totalSpent)} gastos</span>
         <span className="muted">{formatBRL(client.totalDebt)} dívida</span>
+      </div>
+
+      {/* The number, readable and tappable. It used to be write-only — typed
+          into the new-client dialog and never shown again. */}
+      <div className="detail-line">
+        <span className="card-kicker">WhatsApp</span>
+        {client.whatsapp ? (
+          <a
+            className="num"
+            href={`https://wa.me/${client.whatsapp}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {formatWhatsappBR(client.whatsapp)}
+          </a>
+        ) : (
+          <span className="muted">não cadastrado</span>
+        )}
       </div>
 
       {/* The preview IS the shared image — same draw call, so what the owner

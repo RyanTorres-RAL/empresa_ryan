@@ -11,6 +11,7 @@
  * and was measured off that image, not guessed.
  */
 
+import { whatsappLink } from "@/lib/phone";
 import { slugify } from "@/lib/types";
 
 /** The base artwork's intrinsic size. */
@@ -43,6 +44,12 @@ export interface LoyaltyCardData {
   name: string;
   /** 0–10: stamps on the current card. */
   stamps: number;
+  /**
+   * The customer's WhatsApp, digits with country code (see lib/phone.ts).
+   * Optional, and it changes nothing about the drawing — it only decides
+   * whether the share link lands in this person's chat or in a contact picker.
+   */
+  whatsapp?: string;
 }
 
 /* ------------------------------------------------------------------ assets */
@@ -312,8 +319,14 @@ export type ShareOutcome =
   | { kind: "shared" }
   /** The user dismissed the share sheet. Not an error; say nothing. */
   | { kind: "cancelled" }
-  /** No file sharing here: PNG downloaded and wa.me opened in a new tab. */
-  | { kind: "fallback"; waUrl: string; popupBlocked: boolean }
+  /**
+   * No file sharing here: PNG downloaded and wa.me opened in a new tab.
+   * `targeted` is true when the customer's number was known, so the tab landed
+   * straight in their chat instead of WhatsApp's contact picker — the hint
+   * shown to the owner differs, since only one of the two still asks them to
+   * go and find the person.
+   */
+  | { kind: "fallback"; waUrl: string; popupBlocked: boolean; targeted: boolean }
   | { kind: "error"; message: string };
 
 /**
@@ -354,8 +367,15 @@ export async function shareLoyaltyCard(data: LoyaltyCardData): Promise<ShareOutc
 
   // Desktop / Firefox: no file sharing. Download the PNG and open WhatsApp
   // Web with the text ready, then tell the user to attach the image.
+  //
+  // With a number on file this opens THAT customer's chat directly — which is
+  // the entire reason the field exists, and the better fallback here precisely
+  // because the share sheet above (which cannot target a contact) was not
+  // available. Without one it stays the old recipient-less link and WhatsApp
+  // asks who to send to.
   downloadBlob(blob, fileName);
-  const waUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  const digits = (data.whatsapp ?? "").replace(/\D/g, "");
+  const waUrl = whatsappLink(digits, message);
   const win = window.open(waUrl, "_blank", "noopener,noreferrer");
-  return { kind: "fallback", waUrl, popupBlocked: !win };
+  return { kind: "fallback", waUrl, popupBlocked: !win, targeted: digits.length > 0 };
 }

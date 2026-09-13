@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useApp } from "@/lib/context";
 import { Dialog } from "../Dialogs";
+import StockBadge from "../StockBadge";
 import {
   PAYMENT_DISPLAY,
   PAYMENT_LABELS,
@@ -23,10 +24,40 @@ function cartQty(cart: { quantity: number }[]) {
   return cart.reduce((s, c) => s + c.quantity, 0);
 }
 
+/** One product the cart is about to push below zero. */
+interface StockShortfall {
+  name: string;
+  have: number;
+  selling: number;
+  after: number;
+}
+
 export default function VendasScreen() {
   const { data, cart, addToCart, updateCartLine, removeCartLine, clearCart, finalizeSale, confirm, alert } = useApp();
   const [fecharOpen, setFecharOpen] = useState(false);
   const [historicoOpen, setHistoricoOpen] = useState(false);
+
+  /**
+   * Which products this cart would take below zero, and by how much.
+   *
+   * Nothing here blocks anything — the sale is always allowed to go through.
+   * It exists so the person at the counter is TOLD, in the dialog and again on
+   * the confirm, before they finalize.
+   */
+  const shortfalls = useMemo<StockShortfall[]>(() => {
+    const wanted = new Map<string, number>();
+    for (const line of cart) {
+      wanted.set(line.productId, (wanted.get(line.productId) ?? 0) + line.quantity);
+    }
+    const out: StockShortfall[] = [];
+    for (const [productId, selling] of wanted) {
+      const product = data.products.find((p) => p.id === productId);
+      if (!product) continue;
+      const after = product.stock - selling;
+      if (after < 0) out.push({ name: product.name, have: product.stock, selling, after });
+    }
+    return out;
+  }, [cart, data.products]);
 
   const [clientName, setClientName] = useState("");
   const [method, setMethod] = useState<PaymentMethod | "">("");
@@ -49,6 +80,16 @@ export default function VendasScreen() {
     setNotes("");
   }
 
+  async function doFinalizar() {
+    const due = fiadoDueDate ? new Date(fiadoDueDate + "T00:00:00").getTime() : undefined;
+    const ok = await finalizeSale({ cart, clientName, method: method as PaymentMethod, fiadoDueDate: due, notes });
+    if (ok) {
+      clearCart();
+      resetForm();
+      setFecharOpen(false);
+    }
+  }
+
   async function handleFinalizar() {
     if (cart.length === 0) {
       alert("Adicione itens ao carrinho.");
@@ -62,13 +103,21 @@ export default function VendasScreen() {
       alert("Escolha a forma de pagamento.");
       return;
     }
-    const due = fiadoDueDate ? new Date(fiadoDueDate + "T00:00:00").getTime() : undefined;
-    const ok = await finalizeSale({ cart, clientName, method, fiadoDueDate: due, notes });
-    if (ok) {
-      clearCart();
-      resetForm();
-      setFecharOpen(false);
+
+    // Low stock never stops a sale — it asks once, in plain words, and takes
+    // "Confirmar" for an answer. The count is what is wrong, not the sale.
+    if (shortfalls.length > 0) {
+      const lines = shortfalls
+        .map((s) => `• ${s.name}: tem ${s.have}, vendendo ${s.selling} → fica ${s.after}`)
+        .join("\n");
+      confirm(
+        `Esta venda deixa o estoque negativo:\n\n${lines}\n\nA venda vai ser registrada normalmente. Depois é só conferir esses produtos e acertar a quantidade na aba Produtos.`,
+        () => void doFinalizar()
+      );
+      return;
     }
+
+    await doFinalizar();
   }
 
   return (
@@ -90,6 +139,12 @@ export default function VendasScreen() {
             </span>
             <span className="card-title">{p.name}</span>
             <span className="muted">{formatBRL(p.price)}</span>
+            {/* The quantity sits IN the card, where the eye already is when
+                deciding whether to sell this one — not in a floating panel
+                fighting the cart button for the bottom-right corner. */}
+            <div className="stock-row">
+              <StockBadge stock={p.stock} />
+            </div>
             <div className="card-actions">
               <button className="btn btn-primary btn-block" onClick={() => handleAdicionar(p)}>
                 Adicionar
@@ -218,6 +273,25 @@ export default function VendasScreen() {
               placeholder="Opcional"
             />
           </div>
+
+          {/* Shown before the button is pressed, not only on the confirm, so
+              the person can still change the quantity while they are here. */}
+          {shortfalls.length > 0 && (
+            <div className="stock-warning" role="status">
+              <span className="stock-warning-title">Atenção ao estoque</span>
+              <ul className="stock-warning-list">
+                {shortfalls.map((s) => (
+                  <li key={s.name}>
+                    <strong>{s.name}</strong>: tem {s.have}, vendendo {s.selling} → fica{" "}
+                    <span className="num stock-warning-after">{s.after}</span>
+                  </li>
+                ))}
+              </ul>
+              <span className="stock-warning-note">
+                Pode vender assim mesmo. Depois é só recontar esses produtos na aba Produtos.
+              </span>
+            </div>
+          )}
 
           <div className="dialog-actions">
             <button className="btn btn-secondary" onClick={() => setFecharOpen(false)}>

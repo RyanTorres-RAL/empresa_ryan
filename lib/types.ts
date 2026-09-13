@@ -58,12 +58,27 @@ export interface Product {
   size: string;
   price: number;
   complements: string[];
+  /**
+   * Units ready to sell.
+   *
+   * MAY BE NEGATIVE, deliberately. A sale is never blocked for lack of stock —
+   * the owner would rather record the real sale than argue with the counter
+   * while a customer waits — so a negative value simply means the count drifted
+   * and needs recounting. It is a flag, not an error state, and the UI renders
+   * it in the danger colour so it cannot be missed.
+   */
+  stock: number;
 }
 
 export interface Client {
   id: string;
   name: string;
-  matricula: string;
+  /**
+   * Digits only, country code included: "5562995757130". Empty when unknown,
+   * which is the normal case for a walk-up customer. See lib/phone.ts — that
+   * module owns normalising, formatting and the wa.me link built from this.
+   */
+  whatsapp: string;
   totalPurchases: number;
   totalSpent: number;
   totalDebt: number;
