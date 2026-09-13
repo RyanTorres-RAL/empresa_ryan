@@ -230,12 +230,9 @@ export async function drawLoyaltyCard(
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     if (earned) {
+      // Solid fill. Any glyph inside turns to mush at this size, and a ring
+      // reads as an empty slot — the opposite of what an earned stamp means.
       ctx.fillStyle = INK.white;
-      ctx.fill();
-      // little purple açaí dot inside, so a filled stamp reads as a stamp
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
-      ctx.fillStyle = INK.purple;
       ctx.fill();
     } else {
       ctx.strokeStyle = INK.whiteFaint;
