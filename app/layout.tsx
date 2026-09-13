@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Poppins, Sora, Work_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -32,6 +32,30 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: "Açaí do Ryan — PDV & CRM",
   description: "PDV e CRM para Açaí do Ryan",
+  applicationName: "Açaí do Ryan",
+  // iOS before 16.4 ignores the manifest's display mode and reads these
+  // instead, so both are declared. `title` is what sits under the home-screen
+  // icon; without it iOS uses the full <title>, which is far too long.
+  appleWebApp: {
+    capable: true,
+    title: "Açaí do Ryan",
+    statusBarStyle: "default",
+  },
+  other: {
+    // Next emits only the modern `mobile-web-app-capable`. iOS 16.4+ reads the
+    // manifest's display mode instead, but older iPhones read this legacy name
+    // and nothing else — without it they add a browser bookmark, not an app.
+    "apple-mobile-web-app-capable": "yes",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#3d1152",
+  // The PDV is used one-handed at the register; pinch-zoom stays enabled for
+  // accessibility, but the initial scale is pinned so iOS does not zoom in on
+  // a focused input and leave the layout shifted.
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({

@@ -18,7 +18,12 @@ export const config = {
   matcher: [
     /*
      * Everything except Next.js internals and static assets.
+     *
+     * manifest.webmanifest is exempt on purpose: browsers fetch it before
+     * anyone signs in, and a redirect to /login reads as an unparseable
+     * manifest — the install offer then degrades to a plain bookmark. It
+     * carries only the app name, colours and icon paths.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
