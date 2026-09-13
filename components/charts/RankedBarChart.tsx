@@ -101,10 +101,15 @@ export default function RankedBarChart({
     const activeRow = active !== null && active >= 0 && active < count ? rows[active] : null;
     const tooltip: TooltipState | null = activeRow
       ? {
-          x: Math.min(gutter + barWidthOf(activeRow.value), width - 8),
-          y: padY + (active as number) * rowH + 2,
+          // Anchor past the bar's own value label, vertically on the middle of
+          // the hovered row, so the box never covers the figure it explains
+          // nor the rows either side of it.
+          x: Math.min(gutter + barWidthOf(activeRow.value) + valueW, width - 8),
+          y: padY + (active as number) * rowH + rowH / 2,
           title: activeRow.fullLabel,
           rows: activeRow.tooltip,
+          placement: "row",
+          fallbackX: gutter + 8,
         }
       : null;
 

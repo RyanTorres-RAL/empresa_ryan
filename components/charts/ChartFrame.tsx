@@ -50,6 +50,22 @@ export interface TooltipState {
   y: number;
   title: string;
   rows: TooltipRow[];
+  /**
+   * "above" — centred over the anchor, flipping below when the anchor is too
+   * near the top. Right for a time series, where the anchor is a point on the
+   * line and the space above it is empty.
+   *
+   * "row" — vertically centred on the anchor and pushed off to its side. Right
+   * for ranked bars: "above" has nowhere to go on the first row, flips down,
+   * and lands squarely on the next two bars.
+   */
+  placement?: "above" | "row";
+  /**
+   * "row" only: where to fall back to when the box does not fit after the
+   * anchor. Set it to the start of the plot, so an over-long bar is covered
+   * across its flat fill rather than across the figure at its tip.
+   */
+  fallbackX?: number;
 }
 
 /**
@@ -75,14 +91,30 @@ export function ChartTooltip({
 
   if (!state) return null;
 
-  const half = size.w / 2;
-  const left =
-    containerWidth > size.w
-      ? Math.min(Math.max(state.x, half + 4), containerWidth - half - 4)
-      : state.x;
-  // Flip below the anchor when there is no room above it.
-  const above = state.y - size.h - 12 >= 0;
-  const top = above ? state.y - 12 : state.y + 12;
+  let left: number;
+  let top: number;
+  let transform: string;
+
+  if (state.placement === "row") {
+    // Sit beside the anchor, on the hovered row's own band. Prefer the space
+    // after the bar; fall back to before it when that would overflow.
+    const fitsAfter = state.x + 12 + size.w <= containerWidth - 4;
+    left = fitsAfter
+      ? state.x + 12
+      : Math.min(Math.max(4, state.fallbackX ?? 4), Math.max(4, containerWidth - size.w - 4));
+    top = state.y;
+    transform = "translateY(-50%)";
+  } else {
+    const half = size.w / 2;
+    left =
+      containerWidth > size.w
+        ? Math.min(Math.max(state.x, half + 4), containerWidth - half - 4)
+        : state.x;
+    // Flip below the anchor when there is no room above it.
+    const above = state.y - size.h - 12 >= 0;
+    top = above ? state.y - 12 : state.y + 12;
+    transform = `translate(-50%, ${above ? "-100%" : "0"})`;
+  }
 
   return (
     <div
@@ -90,11 +122,7 @@ export function ChartTooltip({
       className="chart-tooltip"
       role="status"
       aria-live="polite"
-      style={{
-        left,
-        top,
-        transform: `translate(-50%, ${above ? "-100%" : "0"})`,
-      }}
+      style={{ left, top, transform }}
     >
       <span className="chart-tooltip-title">{state.title}</span>
       {state.rows.map((r) => (
