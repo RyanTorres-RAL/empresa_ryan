@@ -125,45 +125,63 @@ export default function UsuariosScreen() {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
-                <tr key={u.userId}>
-                  <td>
-                    {u.name}
-                    {u.userId === profile.userId && (
-                      <span className="tag tag-accent" style={{ marginLeft: 6 }}>
-                        você
+              {users.map((u) => {
+                /* Your own row shows no controls. The Server Action already
+                   refuses self-demotion and self-deactivation, but offering
+                   the button and then erroring is a worse answer than not
+                   offering it: the owner should never have to wonder whether
+                   one click could lock them out of their own shop. */
+                const isMe = u.userId === profile.userId;
+                return (
+                  <tr key={u.userId}>
+                    <td>
+                      {u.name}
+                      {isMe && (
+                        <span className="tag tag-accent" style={{ marginLeft: 6 }}>
+                          você
+                        </span>
+                      )}
+                    </td>
+                    <td className="muted">{u.email}</td>
+                    <td>
+                      {isMe ? (
+                        <span>{ROLE_LABELS[u.role]}</span>
+                      ) : (
+                        <select
+                          className="input"
+                          style={{ minWidth: 130 }}
+                          value={u.role}
+                          disabled={pending}
+                          onChange={(e) => handleChangeRole(u, e.target.value as Role)}
+                        >
+                          <option value="dono">Dono</option>
+                          <option value="funcionario">Funcionário</option>
+                        </select>
+                      )}
+                    </td>
+                    <td>
+                      <span className={`tag ${u.active ? "tag-good" : "tag-neutral"}`}>
+                        {u.active ? "Ativo" : "Desativado"}
                       </span>
-                    )}
-                  </td>
-                  <td className="muted">{u.email}</td>
-                  <td>
-                    <select
-                      className="input"
-                      style={{ minWidth: 130 }}
-                      value={u.role}
-                      disabled={pending}
-                      onChange={(e) => handleChangeRole(u, e.target.value as Role)}
-                    >
-                      <option value="dono">Dono</option>
-                      <option value="funcionario">Funcionário</option>
-                    </select>
-                  </td>
-                  <td>
-                    <span className={`tag ${u.active ? "tag-good" : "tag-neutral"}`}>
-                      {u.active ? "Ativo" : "Desativado"}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      className={`btn btn-sm ${u.active ? "btn-danger" : "btn-secondary"}`}
-                      disabled={pending}
-                      onClick={() => handleToggleActive(u)}
-                    >
-                      {u.active ? "Desativar" : "Reativar"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td>
+                      {isMe ? (
+                        <span className="muted" style={{ fontSize: 13 }}>
+                          Sua conta
+                        </span>
+                      ) : (
+                        <button
+                          className={`btn btn-sm ${u.active ? "btn-danger" : "btn-secondary"}`}
+                          disabled={pending}
+                          onClick={() => handleToggleActive(u)}
+                        >
+                          {u.active ? "Desativar" : "Reativar"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
