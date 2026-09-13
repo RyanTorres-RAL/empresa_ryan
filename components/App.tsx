@@ -21,6 +21,7 @@ import {
 import {
   ActionResult,
   addClient as addClientAction,
+  updateClient as updateClientAction,
   adjustProductStock as adjustProductStockAction,
   deleteClient as deleteClientAction,
   deleteCashOut as deleteCashOutAction,
@@ -236,6 +237,14 @@ export default function App({ profile }: { profile: SessionProfile }) {
     return runAction(() => addClientAction(name, whatsapp));
   }
 
+  async function updateClient(id: string, name: string, whatsapp: string): Promise<boolean> {
+    if (!name.trim()) {
+      alertFn("Digite o nome do cliente.");
+      return false;
+    }
+    return runAction(() => updateClientAction(id, name, whatsapp));
+  }
+
   async function deleteClient(id: string): Promise<void> {
     await runAction(() => deleteClientAction(id));
   }
@@ -287,6 +296,7 @@ export default function App({ profile }: { profile: SessionProfile }) {
       deleteProduct,
       adjustProductStock,
       addClient,
+      updateClient,
       deleteClient,
       registerFiadoPayment,
       saveCashOut,

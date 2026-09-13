@@ -619,6 +619,46 @@ export async function addClient(name: string, whatsapp: string): Promise<ActionR
 }
 
 /**
+ * Edits a client's name and WhatsApp number.
+ *
+ * requireUser, not requireOwner: a client created automatically at the till has
+ * no number, and the person who can ring up the sale is the one standing in
+ * front of the customer who would give it. Deleting stays owner-only.
+ *
+ * Past sales keep the name they were rung up under — `crm_sales.client_name` is
+ * its own column, so renaming somebody does not silently rewrite history.
+ */
+export async function updateClient(
+  id: string,
+  name: string,
+  whatsapp: string
+): Promise<ActionResult> {
+  await requireUser();
+
+  if (!name.trim()) return { ok: false, error: "Digite o nome do cliente." };
+
+  const phone = normalizeWhatsapp(whatsapp);
+  if (!phone.ok) return { ok: false, error: phone.error };
+
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase
+    .from("crm_clients")
+    .update({ name: name.trim(), whatsapp: phone.digits })
+    .eq("id", id);
+
+  if (error) {
+    // crm_clients has a unique index on lower(name); Postgres 23505 here means
+    // the new name is already taken, which is worth saying plainly.
+    if (error.code === "23505") {
+      return { ok: false, error: "Já existe um cliente com esse nome." };
+    }
+    return { ok: false, error: error.message };
+  }
+
+  return refreshed();
+}
+
+/**
  * Removes a client. Sales keep their own `client_name`, and the foreign key is
  * ON DELETE SET NULL, so deleting somebody never erases takings from the sales
  * history or the caixa — the rows just stop pointing at a client.

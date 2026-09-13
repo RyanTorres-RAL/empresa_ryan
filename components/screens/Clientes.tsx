@@ -18,13 +18,14 @@ import {
 type SortKey = "name" | "totalPurchases" | "totalSpent" | "totalDebt" | "status" | "stamps";
 
 export default function ClientesScreen() {
-  const { data, addClient, deleteClient, confirm, profile } = useApp();
+  const { data, addClient, updateClient, deleteClient, confirm, profile } = useApp();
   const isOwner = profile.role === "dono";
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<1 | -1>(1);
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [detailClient, setDetailClient] = useState<Client | null>(null);
+  const [editClient, setEditClient] = useState<Client | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -149,6 +150,9 @@ export default function ClientesScreen() {
                     <button className="btn btn-secondary btn-sm" onClick={() => setDetailClient(c)}>
                       Ver / Cartão
                     </button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setEditClient(c)}>
+                      Editar
+                    </button>
                     {isOwner && (
                       <button
                         className="btn btn-ghost btn-sm"
@@ -180,10 +184,20 @@ export default function ClientesScreen() {
       </div>
 
       {newDialogOpen && (
-        <NewClientDialog
+        <ClientFormDialog
           onClose={() => setNewDialogOpen(false)}
           onSave={async (name, whatsapp) => {
             if (await addClient(name, whatsapp)) setNewDialogOpen(false);
+          }}
+        />
+      )}
+
+      {editClient && (
+        <ClientFormDialog
+          client={editClient}
+          onClose={() => setEditClient(null)}
+          onSave={async (name, whatsapp) => {
+            if (await updateClient(editClient.id, name, whatsapp)) setEditClient(null);
           }}
         />
       )}
@@ -195,17 +209,28 @@ export default function ClientesScreen() {
   );
 }
 
-function NewClientDialog({
+/**
+ * Create and edit share one dialog: the fields, the hint and the phone
+ * handling are identical, and only the title, the starting values and the
+ * button label differ. Passing `client` switches it to edit.
+ */
+function ClientFormDialog({
+  client,
   onClose,
   onSave,
 }: {
+  client?: Client;
   onClose: () => void;
   onSave: (name: string, whatsapp: string) => void;
 }) {
-  const [name, setName] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
+  const [name, setName] = useState(client?.name ?? "");
+  // Pre-filled formatted rather than as raw digits — the owner should see
+  // (62) 99575-7130, not 5562995757130. It is re-normalised on save.
+  const [whatsapp, setWhatsapp] = useState(
+    client?.whatsapp ? formatWhatsappBR(client.whatsapp) : ""
+  );
   return (
-    <Dialog onClose={onClose} title="Novo cliente" size="sm">
+    <Dialog onClose={onClose} title={client ? "Editar cliente" : "Novo cliente"} size="sm">
       <div className="field">
         <label>Nome</label>
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
@@ -232,7 +257,7 @@ function NewClientDialog({
           Cancelar
         </button>
         <button className="btn btn-primary" onClick={() => onSave(name, whatsapp)}>
-          Salvar
+          {client ? "Salvar alterações" : "Salvar"}
         </button>
       </div>
     </Dialog>

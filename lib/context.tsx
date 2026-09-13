@@ -73,6 +73,7 @@ export interface AppContextValue {
   adjustProductStock: (id: string, delta: number) => Promise<boolean>;
 
   addClient: (name: string, whatsapp: string) => Promise<boolean>;
+  updateClient: (id: string, name: string, whatsapp: string) => Promise<boolean>;
   deleteClient: (id: string) => Promise<void>;
 
   registerFiadoPayment: (fiadoId: string, amount: number, method: PaymentMethod) => Promise<boolean>;
