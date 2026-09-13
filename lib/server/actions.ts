@@ -398,6 +398,35 @@ export async function deleteSale(saleId: string): Promise<ActionResult> {
     .select("name, quantity")
     .eq("sale_id", saleId);
 
+  /**
+   * Clear the fiado this sale created, and every payment recorded against it.
+   *
+   * This runs OUTSIDE the client block and does NOT filter on `paid`, because
+   * both of those were bugs: a fully-settled fiado was never matched, so it and
+   * its payments outlived the sale, and a sale whose client had already been
+   * deleted (client_id null) skipped the cleanup altogether.
+   *
+   * Payments must go first — crm_fiado_payments.fiado_id is ON DELETE SET NULL,
+   * so removing the fiado alone leaves them orphaned, and Caixa counts every
+   * fiado payment as money in. That is exactly how the owner ended up with R$36
+   * of income traceable to no sale at all.
+   */
+  const { data: saleFiado } = await supabase
+    .from("crm_fiados")
+    .select("*")
+    .eq("sale_id", saleId)
+    .limit(1)
+    .maybeSingle();
+
+  let debtRelief = 0;
+  if (saleFiado) {
+    if (!saleFiado.paid) {
+      debtRelief = Number(saleFiado.amount) - Number(saleFiado.amount_paid ?? 0);
+    }
+    await supabase.from("crm_fiado_payments").delete().eq("fiado_id", saleFiado.id);
+    await supabase.from("crm_fiados").delete().eq("id", saleFiado.id);
+  }
+
   if (saleRow.client_id) {
     const { data: clientRow } = await supabase
       .from("crm_clients")
@@ -412,18 +441,10 @@ export async function deleteSale(saleId: string): Promise<ActionResult> {
       let totalDebt = Number(clientRow.total_debt);
       let status: "Adimplente" | "Devedor" = clientRow.status;
 
-      const { data: existingFiado } = await supabase
-        .from("crm_fiados")
-        .select("*")
-        .eq("sale_id", saleId)
-        .eq("paid", false)
-        .limit(1)
-        .maybeSingle();
-
-      if (existingFiado) {
-        const remaining = Number(existingFiado.amount) - Number(existingFiado.amount_paid);
-        totalDebt = Math.max(0, totalDebt - remaining);
-        await supabase.from("crm_fiados").delete().eq("id", existingFiado.id);
+      // The fiado itself was already removed above; only the client's balance
+      // is settled here, and only for what was still owed on it.
+      if (debtRelief > 0) {
+        totalDebt = Math.max(0, totalDebt - debtRelief);
         status = totalDebt <= 0 ? "Adimplente" : "Devedor";
       }
 
