@@ -41,7 +41,7 @@ export default function SetupForm() {
             <Logo variant="light" height={190} />
           </span>
           <span className="auth-kicker">PDV &amp; CRM</span>
-          <p className="auth-tagline">Sistema de vendas e controle de fiado</p>
+          <p className="auth-tagline">Sistema de vendas</p>
         </div>
       </aside>
 
