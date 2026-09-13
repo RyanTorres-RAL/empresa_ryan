@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Sora, Work_Sans } from "next/font/google";
+import { Poppins, Sora, Work_Sans } from "next/font/google";
 import "./globals.css";
 
 // Sora for headings and numbers, Work Sans for body copy. Loaded through
@@ -19,6 +19,16 @@ const workSans = Work_Sans({
   display: "swap",
 });
 
+// Only the loyalty card uses this: it is the closest widely-available match to
+// the rounded geometric face on the shop's printed card, so the name written
+// onto the card sits in the same typographic voice as the artwork behind it.
+const poppins = Poppins({
+  subsets: ["latin", "latin-ext"],
+  weight: ["500", "600"],
+  variable: "--font-poppins",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "Açaí do Ryan — PDV & CRM",
   description: "PDV e CRM para Açaí do Ryan",
@@ -28,7 +38,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="pt-BR" className={`${sora.variable} ${workSans.variable}`}>
+    <html lang="pt-BR" className={`${sora.variable} ${workSans.variable} ${poppins.variable}`}>
       <body>{children}</body>
     </html>
   );
