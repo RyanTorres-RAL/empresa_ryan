@@ -5,6 +5,7 @@ import { useApp } from "@/lib/context";
 import { Screen } from "@/lib/context";
 import { ROLE_LABELS } from "@/lib/types";
 import { sair } from "@/lib/server/auth-actions";
+import Logo from "./Logo";
 
 /**
  * `owner: true` tabs are only rendered for a dono — but that is cosmetic
@@ -35,15 +36,21 @@ export default function Nav() {
   return (
     <nav className="nav">
       <div className="nav-brand-block">
-        <span className="nav-brand">Açaí do Ryan</span>
-        <span className="nav-kicker">PDV &amp; CRM</span>
+        {/* Inlined SVG so the outlines pick up `color` — white here. */}
+        <span className="nav-brand-logo">
+          <Logo size={34} />
+        </span>
+        <span className="nav-brand-text">
+          <span className="nav-brand">Açaí do Ryan</span>
+          <span className="nav-kicker">PDV &amp; CRM</span>
+        </span>
       </div>
 
       <div className="nav-tabs">
         {tabs.map((t) => (
           <button
             key={t.key}
-            className={`btn ${screen === t.key ? "btn-primary" : "btn-ghost"}`}
+            className={`btn ${screen === t.key ? "nav-tab-active" : ""}`}
             onClick={() => setScreen(t.key)}
           >
             {t.label}
@@ -52,14 +59,14 @@ export default function Nav() {
       </div>
 
       <div className="nav-right">
-        <button className="btn btn-secondary btn-sm" onClick={toggleTheme}>
+        <button className="btn btn-sm nav-action" onClick={toggleTheme}>
           {theme === "dark" ? "Modo claro" : "Modo escuro"}
         </button>
         <div className="nav-user">
           <span className="nav-user-name">{profile.name}</span>
           <span className="nav-role-label">{ROLE_LABELS[profile.role]}</span>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={handleSignOut} disabled={pending}>
+        <button className="btn btn-sm nav-action" onClick={handleSignOut} disabled={pending}>
           {pending ? "Saindo…" : "Sair"}
         </button>
       </div>

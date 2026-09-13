@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { primeiroAcesso } from "@/lib/server/auth-actions";
+import Logo from "@/components/Logo";
 
 export default function SetupForm() {
   const [name, setName] = useState("");
@@ -34,74 +35,90 @@ export default function SetupForm() {
 
   return (
     <div className="auth-page">
-      <form className="auth-card" onSubmit={handleSubmit}>
-        <div className="auth-brand-block">
-          <span className="auth-brand">Açaí do Ryan</span>
+      <aside className="auth-brand-panel">
+        <div className="auth-brand-inner">
+          <span className="auth-brand-logo">
+            <Logo size={76} />
+          </span>
           <span className="auth-kicker">PDV &amp; CRM</span>
+          <span className="auth-brand">Açaí do Ryan</span>
+          <p className="auth-tagline">Sistema de vendas e controle de fiado</p>
         </div>
+      </aside>
 
-        <h1 className="dialog-title">Primeiro acesso</h1>
-        <p className="muted" style={{ fontSize: 14 }}>
-          Ninguém foi cadastrado ainda. Crie aqui a conta do dono da loja — ela
-          terá acesso a tudo, inclusive ao cadastro dos funcionários. Esta
-          página fecha sozinha depois disso.
-        </p>
+      <div className="auth-form-panel">
+        <form className="auth-card" onSubmit={handleSubmit}>
+          <div className="auth-mobile-brand">
+            <Logo size={40} />
+            <span className="nav-brand-text">
+              <span className="auth-brand">Açaí do Ryan</span>
+              <span className="auth-kicker">PDV &amp; CRM</span>
+            </span>
+          </div>
 
-        <div className="field">
-          <label htmlFor="setup-name">Seu nome</label>
-          <input
-            id="setup-name"
-            className="input"
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Ex: Ryan"
-          />
-        </div>
+          <h1 className="auth-form-title">Primeiro acesso</h1>
+          <p className="auth-intro">
+            Ninguém foi cadastrado ainda. Crie aqui a conta do dono da loja — ela
+            terá acesso a tudo, inclusive ao cadastro dos funcionários. Esta
+            página fecha sozinha depois disso.
+          </p>
 
-        <div className="field">
-          <label htmlFor="setup-email">E-mail</label>
-          <input
-            id="setup-email"
-            className="input"
-            type="email"
-            autoComplete="username"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="voce@exemplo.com"
-          />
-        </div>
+          <div className="field">
+            <label htmlFor="setup-name">Seu nome</label>
+            <input
+              id="setup-name"
+              className="input"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ex: Ryan"
+            />
+          </div>
 
-        <div className="field">
-          <label htmlFor="setup-password">Senha (mínimo 6 caracteres)</label>
-          <input
-            id="setup-password"
-            className="input"
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
+          <div className="field">
+            <label htmlFor="setup-email">E-mail</label>
+            <input
+              id="setup-email"
+              className="input"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="voce@exemplo.com"
+            />
+          </div>
 
-        <div className="field">
-          <label htmlFor="setup-password-2">Repita a senha</label>
-          <input
-            id="setup-password-2"
-            className="input"
-            type="password"
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-          />
-        </div>
+          <div className="field">
+            <label htmlFor="setup-password">Senha (mínimo 6 caracteres)</label>
+            <input
+              id="setup-password"
+              className="input"
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
 
-        {error && <div className="auth-error">{error}</div>}
+          <div className="field">
+            <label htmlFor="setup-password-2">Repita a senha</label>
+            <input
+              id="setup-password-2"
+              className="input"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </div>
 
-        <button className="btn btn-primary btn-block" type="submit" disabled={pending}>
-          {pending ? "Criando…" : "Criar conta do dono"}
-        </button>
-      </form>
+          {error && <div className="auth-error">{error}</div>}
+
+          <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={pending}>
+            {pending ? "Criando…" : "Criar conta do dono"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

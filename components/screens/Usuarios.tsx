@@ -149,7 +149,7 @@ export default function UsuariosScreen() {
                     </select>
                   </td>
                   <td>
-                    <span className={`tag ${u.active ? "tag-outline" : "tag-neutral"}`}>
+                    <span className={`tag ${u.active ? "tag-good" : "tag-neutral"}`}>
                       {u.active ? "Ativo" : "Desativado"}
                     </span>
                   </td>

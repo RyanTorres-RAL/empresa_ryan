@@ -3,7 +3,14 @@
 import { useMemo, useState } from "react";
 import { useApp } from "@/lib/context";
 import { Dialog } from "../Dialogs";
-import { Client, formatBRL, slugify } from "@/lib/types";
+import Logo from "../Logo";
+import { Client, formatBRL } from "@/lib/types";
+import {
+  downloadBlob,
+  loyaltyFileName,
+  renderLoyaltyCardBlob,
+  shareLoyaltyCard,
+} from "@/lib/loyalty-card";
 
 type SortKey = "name" | "totalPurchases" | "totalSpent" | "totalDebt" | "status" | "stamps";
 
@@ -128,7 +135,7 @@ export default function ClientesScreen() {
                 <td>{formatBRL(c.totalSpent)}</td>
                 <td>{formatBRL(c.totalDebt)}</td>
                 <td>
-                  <span className={`tag ${c.status === "Devedor" ? "tag-accent" : "tag-neutral"}`}>
+                  <span className={`tag ${c.status === "Devedor" ? "tag-warn" : "tag-good"}`}>
                     {c.status}
                   </span>
                 </td>
@@ -199,69 +206,57 @@ function NewClientDialog({
 }
 
 function ClientDetailDialog({ client, onClose }: { client: Client; onClose: () => void }) {
-  const { data } = useApp();
+  const { data, alert } = useApp();
   const stamps = client.fidelityStamps % 10;
   const sales = data.sales.filter((s) => s.clientId === client.id);
+  const missing = 10 - stamps;
 
-  function handleDownload() {
-    const canvas = document.createElement("canvas");
-    canvas.width = 640;
-    canvas.height = 400;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+  const [busy, setBusy] = useState<null | "download" | "share">(null);
+  const [shareHint, setShareHint] = useState<string | null>(null);
+  const [waUrl, setWaUrl] = useState<string | null>(null);
 
-    ctx.fillStyle = "#f3f2f2";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const cardData = { name: client.name, stamps };
 
-    ctx.strokeStyle = "#b68235";
-    ctx.lineWidth = 3;
-    ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
-
-    ctx.fillStyle = "#b68235";
-    ctx.textAlign = "center";
-    ctx.font = "16px Georgia, serif";
-    ctx.fillText("CARTÃO FIDELIDADE", canvas.width / 2, 70);
-
-    ctx.fillStyle = "#201f1d";
-    ctx.font = "bold 34px Georgia, serif";
-    ctx.fillText("Açaí do Ryan", canvas.width / 2, 115);
-
-    ctx.font = "22px Georgia, serif";
-    ctx.fillText(client.name, canvas.width / 2, 155);
-
-    const total = stamps;
-    const spacing = 28;
-    const startX = canvas.width / 2 - (spacing * 9) / 2;
-    const y = 210;
-    for (let i = 0; i < 10; i++) {
-      const x = startX + i * spacing;
-      ctx.beginPath();
-      ctx.arc(x, y, 10, 0, Math.PI * 2);
-      ctx.strokeStyle = "#b68235";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      if (i < total) {
-        ctx.fillStyle = "#b68235";
-        ctx.fill();
+  async function handleDownload() {
+    setBusy("download");
+    setShareHint(null);
+    setWaUrl(null);
+    try {
+      const blob = await renderLoyaltyCardBlob(cardData);
+      if (!blob) {
+        alert("Não foi possível gerar a imagem do cartão.");
+        return;
       }
+      downloadBlob(blob, loyaltyFileName(client.name));
+    } finally {
+      setBusy(null);
     }
+  }
 
-    ctx.fillStyle = "#201f1d";
-    ctx.font = "16px Georgia, serif";
-    ctx.fillText(`${stamps}/10 compras para o próximo brinde`, canvas.width / 2, 260);
-    ctx.fillText(`Total de compras: ${client.totalPurchases}`, canvas.width / 2, 290);
-
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `cartao-fidelidade-${slugify(client.name)}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, "image/png");
+  /**
+   * Called straight from the click — navigator.share() needs the user
+   * gesture, and so does the window.open() in the desktop fallback.
+   */
+  async function handleShare() {
+    setBusy("share");
+    setShareHint(null);
+    setWaUrl(null);
+    try {
+      const outcome = await shareLoyaltyCard(cardData);
+      if (outcome.kind === "fallback") {
+        setWaUrl(outcome.popupBlocked ? outcome.waUrl : null);
+        setShareHint(
+          outcome.popupBlocked
+            ? "A imagem foi baixada. O navegador bloqueou a aba do WhatsApp — use o link abaixo e anexe a imagem à conversa."
+            : "A imagem foi baixada e o WhatsApp abriu em outra aba. Escolha a conversa e anexe a imagem que acabou de baixar."
+        );
+      } else if (outcome.kind === "error") {
+        alert(outcome.message);
+      }
+      // "shared" and "cancelled" need no message at all.
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
@@ -272,21 +267,52 @@ function ClientDetailDialog({ client, onClose }: { client: Client; onClose: () =
         <span className="muted">{formatBRL(client.totalDebt)} dívida</span>
       </div>
 
+      {/* Preview of the shared image. Brand colours are fixed here on
+          purpose — the card looks the same in light and dark mode. */}
       <div className="loyalty-card">
-        <span className="card-kicker">Cartão Fidelidade</span>
-        <span className="card-title-lg">Açaí do Ryan</span>
-        <span>{client.name}</span>
-        <div className="stamp-row">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <span key={i} className={`stamp ${i < stamps ? "filled" : ""}`} />
-          ))}
+        <div className="loyalty-inner">
+          <span className="card-kicker">Cartão Fidelidade</span>
+          <span className="card-title-lg">Açaí do Ryan</span>
+          <span className="loyalty-name">{client.name}</span>
+          <div className="stamp-row">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <span key={i} className={`stamp ${i < stamps ? "filled" : ""}`} />
+            ))}
+          </div>
+          <span className="loyalty-progress">
+            {stamps >= 10
+              ? "10 de 10 — o próximo açaí é grátis!"
+              : `${stamps} de 10 · ${missing === 1 ? "falta 1 selo" : `faltam ${missing} selos`}`}
+          </span>
+          <span className="loyalty-tagline">A cada 10 açaís, você ganha um de graça.</span>
+          <span className="loyalty-logo">
+            <Logo size={34} />
+          </span>
         </div>
-        <span className="muted">{stamps}/10 compras para o próximo brinde</span>
       </div>
 
-      <button className="btn btn-secondary btn-block" onClick={handleDownload}>
-        Baixar cartão como imagem
-      </button>
+      <div className="card-actions" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+        <button className="btn btn-secondary" onClick={handleDownload} disabled={busy !== null}>
+          {busy === "download" ? "Gerando…" : "Baixar imagem"}
+        </button>
+        <button className="btn btn-accent" onClick={handleShare} disabled={busy !== null}>
+          {busy === "share" ? "Preparando…" : "Enviar no WhatsApp"}
+        </button>
+      </div>
+
+      {shareHint && (
+        <div className="share-hint">
+          {shareHint}
+          {waUrl && (
+            <>
+              {" "}
+              <a href={waUrl} target="_blank" rel="noopener noreferrer">
+                Abrir WhatsApp
+              </a>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="hr" />
       <span className="card-title" style={{ fontSize: 15 }}>
