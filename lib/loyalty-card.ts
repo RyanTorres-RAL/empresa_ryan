@@ -13,23 +13,30 @@
 import { slugify } from "@/lib/types";
 
 export const CARD_W = 1080;
-export const CARD_H = 720;
+/** 1.74:1 — the proportions of the shop's printed card. */
+export const CARD_H = 620;
 /** Drawn at 2× so it stays crisp on phone screens and when zoomed. */
 export const CARD_SCALE = 2;
 
+/**
+ * Sampled from the owner's own printed card (his Canva layout): deep
+ * indigo-purple ground, one vivid violet blob, white stamp circles, a gold
+ * star for the free one, bright green leaves. No mint/teal anywhere — that
+ * was a drift away from his brand.
+ */
 const INK = {
-  purple: "#3D1152",
-  purpleDeep: "#2A0B3A",
-  blob: "#5B1A73",
-  blobSoft: "rgba(255, 255, 255, 0.06)",
+  purple: "#3E0F66",
+  purpleDeep: "#320B54",
+  blob: "#5B21D6",
+  blobSoft: "rgba(255, 255, 255, 0.07)",
   white: "#FFFFFF",
-  whiteSoft: "rgba(255, 255, 255, 0.78)",
-  whiteFaint: "rgba(255, 255, 255, 0.52)",
-  mint: "#B9F5D8",
-  green: "#16B978",
-  greenDeep: "#0E9F66",
-  leaf: "#48B93C",
-  leafDark: "#2F8C2A",
+  whiteSoft: "rgba(255, 255, 255, 0.80)",
+  whiteFaint: "rgba(255, 255, 255, 0.55)",
+  goldTop: "#A86FA8",
+  goldMid: "#E0A44A",
+  goldLow: "#FFD24A",
+  leaf: "#2FB81F",
+  leafDark: "#1F8F14",
 } as const;
 
 const HEADING = '"Sora", "Work Sans", system-ui, -apple-system, sans-serif';
@@ -101,7 +108,8 @@ function blob(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) 
   ctx.closePath();
 }
 
-function star(ctx: CanvasRenderingContext2D, cx: number, cy: number, outer: number, inner: number) {
+/** Traces a five-pointed star. Caller fills it — some are gradient-filled. */
+function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, outer: number, inner: number) {
   ctx.beginPath();
   for (let i = 0; i < 10; i++) {
     const r = i % 2 === 0 ? outer : inner;
@@ -112,6 +120,16 @@ function star(ctx: CanvasRenderingContext2D, cx: number, cy: number, outer: numb
     else ctx.lineTo(x, y);
   }
   ctx.closePath();
+}
+
+/** The printed card's star: mauve at the tip grading down to gold. */
+function goldStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, outer: number) {
+  const g = ctx.createLinearGradient(cx, cy - outer, cx, cy + outer);
+  g.addColorStop(0, INK.goldTop);
+  g.addColorStop(0.55, INK.goldMid);
+  g.addColorStop(1, INK.goldLow);
+  starPath(ctx, cx, cy, outer, outer * 0.44);
+  ctx.fillStyle = g;
   ctx.fill();
 }
 
@@ -179,139 +197,133 @@ export async function drawLoyaltyCard(
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
 
-  // organic lighter-purple blob, top-right
+  // vivid violet blobs bleeding off two corners, as on the printed card
   ctx.save();
   ctx.fillStyle = INK.blob;
-  blob(ctx, CARD_W - 110, 40, 250);
+  blob(ctx, CARD_W - 60, 10, 240);
+  ctx.fill();
+  blob(ctx, 10, CARD_H - 10, 150);
   ctx.fill();
   ctx.fillStyle = INK.blobSoft;
-  blob(ctx, CARD_W - 40, 150, 170);
+  blob(ctx, CARD_W - 150, 120, 150);
   ctx.fill();
   ctx.restore();
 
-  // thin inner keyline
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.16)";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(24, 24, CARD_W - 48, CARD_H - 48);
+  const padX = 76;
 
-  const padX = 72;
-
-  // ---- header -------------------------------------------------------
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
 
-  setLetterSpacing(ctx, "4px");
-  ctx.fillStyle = INK.mint;
-  ctx.font = `600 20px ${HEADING}`;
-  ctx.fillText("CARTÃO FIDELIDADE", padX, 96);
+  // ---- brand lockup, top-left ----------------------------------------
+  if (logo) ctx.drawImage(logo, padX - 14, 26, 84, 84);
+
+  const wordX = padX + 68;
+  setLetterSpacing(ctx, "1px");
+  ctx.fillStyle = INK.white;
+  ctx.font = `700 32px ${HEADING}`;
+  ctx.fillText("AÇAÍ", wordX, 72);
+  ctx.font = `700 19px ${HEADING}`;
+  ctx.fillText("DO RYAN", wordX, 98);
   setLetterSpacing(ctx, "0px");
 
-  ctx.fillStyle = INK.white;
-  ctx.font = `700 56px ${HEADING}`;
-  ctx.fillText("Açaí do Ryan", padX, 158);
-
-  ctx.fillStyle = INK.whiteSoft;
-  ctx.font = `400 25px ${BODY}`;
-  ctx.fillText("A cada 10 açaís, você ganha um de graça.", padX, 200);
-
-  // ---- stamps: two rows of five, plus the GRÁTIS star ---------------
+  // ---- stamps: two rows of five, then the GRÁTIS star ---------------
   const r = 40;
-  const gapX = 112;
-  const rowY = [306, 424];
-  const startX = 128;
+  const gapX = 110;
+  const rowY = [196, 304];
+  const startX = 102;
 
   for (let i = 0; i < 10; i++) {
-    const row = i < 5 ? 0 : 1;
-    const col = i % 5;
-    const cx = startX + col * gapX;
-    const cy = rowY[row];
-    const earned = i < stamps;
+    const cx = startX + (i % 5) * gapX;
+    const cy = rowY[i < 5 ? 0 : 1];
 
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    if (earned) {
-      // Solid fill. Any glyph inside turns to mush at this size, and a ring
-      // reads as an empty slot — the opposite of what an earned stamp means.
+    if (i < stamps) {
       ctx.fillStyle = INK.white;
       ctx.fill();
+      goldStar(ctx, cx, cy + 1, r * 0.62);
     } else {
+      // Still a circle, as on the printed card — just waiting to be filled.
+      ctx.fillStyle = "rgba(255, 255, 255, 0.14)";
+      ctx.fill();
       ctx.strokeStyle = INK.whiteFaint;
       ctx.lineWidth = 3;
-      ctx.setLineDash([]);
       ctx.stroke();
     }
   }
 
-  // the 11th slot — the free one
-  const freeX = startX + 5 * gapX + 34;
+  const freeX = startX + 5 * gapX + 52;
   const freeY = (rowY[0] + rowY[1]) / 2;
-  ctx.beginPath();
-  ctx.arc(freeX, freeY, 58, 0, Math.PI * 2);
-  ctx.fillStyle = complete ? INK.green : "rgba(22, 185, 120, 0.22)";
-  ctx.fill();
-  ctx.strokeStyle = INK.green;
-  ctx.lineWidth = 4;
-  ctx.stroke();
-
-  ctx.fillStyle = complete ? INK.white : INK.mint;
-  star(ctx, freeX, freeY - 6, 30, 13);
 
   ctx.textAlign = "center";
-  setLetterSpacing(ctx, "2px");
-  ctx.fillStyle = complete ? INK.white : INK.mint;
-  ctx.font = `700 20px ${HEADING}`;
-  ctx.fillText("GRÁTIS", freeX, freeY + 92);
+  setLetterSpacing(ctx, "3px");
+  ctx.fillStyle = INK.white;
+  ctx.font = `700 26px ${HEADING}`;
+  ctx.fillText("GRÁTIS", freeX, freeY - 76);
   setLetterSpacing(ctx, "0px");
 
-  // ---- progress -----------------------------------------------------
+  ctx.beginPath();
+  ctx.arc(freeX, freeY, 58, 0, Math.PI * 2);
+  ctx.fillStyle = INK.white;
+  ctx.fill();
+  if (!complete) {
+    ctx.globalAlpha = 0.45; // dimmed until it's actually been earned
+  }
+  goldStar(ctx, freeX, freeY + 2, 40);
+  ctx.globalAlpha = 1;
+
+  // ---- tagline + progress -------------------------------------------
   ctx.textAlign = "left";
   ctx.fillStyle = INK.white;
+  ctx.font = `400 27px ${BODY}`;
+  ctx.fillText("A cada 10 açaís, você ganha um de graça.", padX, 396);
+
   ctx.font = `700 30px ${HEADING}`;
-  ctx.fillText(complete ? "10 de 10 — açaí grátis!" : `${stamps} de 10`, padX, 540);
+  ctx.fillStyle = complete ? INK.goldLow : INK.white;
+  ctx.fillText(complete ? "Cartão completo!" : `${stamps} de 10 selos`, padX, 446);
 
   ctx.fillStyle = INK.whiteSoft;
-  ctx.font = `400 22px ${BODY}`;
-  ctx.fillText(
-    complete
-      ? "Mostre este cartão na loja para retirar o seu."
-      : `${10 - stamps === 1 ? "Falta 1 selo" : `Faltam ${10 - stamps} selos`} para o próximo açaí grátis.`,
-    padX,
-    574
-  );
-
-  // ---- bottom: logo, name line, leaves -------------------------------
-  if (logo) {
-    ctx.drawImage(logo, padX - 8, 600, 96, 96);
+  ctx.font = `400 23px ${BODY}`;
+  if (complete) {
+    ctx.fillText("O próximo açaí é por nossa conta.", padX, 480);
+  } else {
+    const left = 10 - stamps;
+    ctx.fillText(
+      `${left === 1 ? "Falta 1 selo" : `Faltam ${left} selos`} para o açaí grátis.`,
+      padX,
+      480
+    );
   }
 
-  const nameX = padX + 104;
+  // ---- name line ------------------------------------------------------
+  const nameY = 552;
   ctx.fillStyle = INK.whiteSoft;
-  ctx.font = `400 22px ${BODY}`;
-  ctx.fillText("Nome:", nameX, 664);
+  ctx.font = `400 24px ${BODY}`;
+  ctx.fillText("Nome:", padX, nameY);
+  const labelW = ctx.measureText("Nome:").width;
 
-  const nameLabelW = ctx.measureText("Nome:").width;
   ctx.fillStyle = INK.white;
-  ctx.font = `600 28px ${HEADING}`;
-  const nameValueX = nameX + nameLabelW + 14;
-  ctx.fillText(data.name, nameValueX, 664);
+  ctx.font = `600 30px ${HEADING}`;
+  const nameX = padX + labelW + 16;
+  ctx.fillText(data.name, nameX, nameY);
 
-  // writing line under the name, like the printed card
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.38)";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(nameX, 678);
-  ctx.lineTo(Math.min(CARD_W - 260, nameValueX + Math.max(220, ctx.measureText(data.name).width + 40)), 678);
+  ctx.moveTo(padX, nameY + 16);
+  ctx.lineTo(Math.min(CARD_W - 300, nameX + Math.max(240, ctx.measureText(data.name).width + 40)), nameY + 16);
   ctx.stroke();
 
-  // decorative leaves, bottom-right
-  leaf(ctx, CARD_W - 196, 660, 108, -0.62, INK.leaf);
-  leaf(ctx, CARD_W - 186, 668, 84, -0.1, INK.leafDark);
+  // ---- leaves, bottom-right -------------------------------------------
+  leaf(ctx, CARD_W - 210, CARD_H - 66, 116, -0.72, INK.leaf);
+  leaf(ctx, CARD_W - 196, CARD_H - 54, 96, -0.2, INK.leafDark);
+  leaf(ctx, CARD_W - 214, CARD_H - 60, 78, -1.25, INK.leaf);
   ctx.strokeStyle = INK.leafDark;
   ctx.lineWidth = 5;
   ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(CARD_W - 200, 664);
-  ctx.quadraticCurveTo(CARD_W - 216, 684, CARD_W - 208, 700);
+  ctx.moveTo(CARD_W - 214, CARD_H - 60);
+  ctx.quadraticCurveTo(CARD_W - 232, CARD_H - 36, CARD_W - 224, CARD_H - 14);
   ctx.stroke();
 }
 

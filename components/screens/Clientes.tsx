@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/lib/context";
 import { Dialog } from "../Dialogs";
-import Logo from "../Logo";
 import { Client, formatBRL } from "@/lib/types";
 import {
+  CARD_H,
+  CARD_W,
   downloadBlob,
+  drawLoyaltyCard,
   loyaltyFileName,
   renderLoyaltyCardBlob,
   shareLoyaltyCard,
@@ -209,13 +211,17 @@ function ClientDetailDialog({ client, onClose }: { client: Client; onClose: () =
   const { data, alert } = useApp();
   const stamps = client.fidelityStamps % 10;
   const sales = data.sales.filter((s) => s.clientId === client.id);
-  const missing = 10 - stamps;
 
   const [busy, setBusy] = useState<null | "download" | "share">(null);
   const [shareHint, setShareHint] = useState<string | null>(null);
   const [waUrl, setWaUrl] = useState<string | null>(null);
+  const previewRef = useRef<HTMLCanvasElement>(null);
 
   const cardData = { name: client.name, stamps };
+
+  useEffect(() => {
+    if (previewRef.current) void drawLoyaltyCard(previewRef.current, { name: client.name, stamps });
+  }, [client.name, stamps]);
 
   async function handleDownload() {
     setBusy("download");
@@ -267,29 +273,20 @@ function ClientDetailDialog({ client, onClose }: { client: Client; onClose: () =
         <span className="muted">{formatBRL(client.totalDebt)} dívida</span>
       </div>
 
-      {/* Preview of the shared image. Brand colours are fixed here on
-          purpose — the card looks the same in light and dark mode. */}
-      <div className="loyalty-card">
-        <div className="loyalty-inner">
-          <span className="card-kicker">Cartão Fidelidade</span>
-          <span className="card-title-lg">Açaí do Ryan</span>
-          <span className="loyalty-name">{client.name}</span>
-          <div className="stamp-row">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <span key={i} className={`stamp ${i < stamps ? "filled" : ""}`} />
-            ))}
-          </div>
-          <span className="loyalty-progress">
-            {stamps >= 10
-              ? "10 de 10 — o próximo açaí é grátis!"
-              : `${stamps} de 10 · ${missing === 1 ? "falta 1 selo" : `faltam ${missing} selos`}`}
-          </span>
-          <span className="loyalty-tagline">A cada 10 açaís, você ganha um de graça.</span>
-          <span className="loyalty-logo">
-            <Logo size={34} />
-          </span>
-        </div>
-      </div>
+      {/* The preview IS the shared image — same draw call, so what the owner
+          sees here is byte-for-byte what the customer receives. A separate
+          CSS mock-up of the card would drift from it. */}
+      <canvas
+        ref={previewRef}
+        aria-label={`Cartão fidelidade de ${client.name}: ${stamps} de 10 selos`}
+        style={{
+          display: "block",
+          width: "100%",
+          height: "auto",
+          aspectRatio: `${CARD_W} / ${CARD_H}`,
+          borderRadius: "var(--radius-lg)",
+        }}
+      />
 
       <div className="card-actions" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
         <button className="btn btn-secondary" onClick={handleDownload} disabled={busy !== null}>
